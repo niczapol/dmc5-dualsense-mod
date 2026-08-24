@@ -1,0 +1,30 @@
+# .NET build products
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Local experiments and historical publish folders
+publish*/
+
+# Runtime telemetry and local installation state
+*.log
+*.csv
+install-manifest.json
+backup/
+
+# Generated package payloads
+Package/DMC5DualSense.Bridge.exe
+Package/DMC5DualSense.cs
+Package/Dependencies/
+Package/Source/
+
+# Copyrighted game resources extracted from a locally owned copy.
+# The repository tracks source code and extraction/audit tooling, not game data.
+Bridge/Assets/Haptics/*.wav
+Package/UI/
+
+# Local probes
+PluginCheck/obj/
+XInputProbe/obj/
+

@@ -193,6 +193,37 @@ internal static class Program
     {
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var lastCharacter = "";
+        var windowStartedUtc = DateTime.UtcNow;
+        var motorPackets = 0;
+        var padShakePackets = 0;
+        var events = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var originalHaptics = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        static void Increment(Dictionary<string, int> counters, string key)
+        {
+            counters[key] = counters.TryGetValue(key, out var count) ? count + 1 : 1;
+        }
+
+        void FlushDiagnosticsIfDue()
+        {
+            var now = DateTime.UtcNow;
+            if (now - windowStartedUtc < TimeSpan.FromSeconds(5)) return;
+            if (motorPackets > 0 || padShakePackets > 0 || events.Count > 0 || originalHaptics.Count > 0)
+            {
+                var eventSummary = string.Join(",", events.OrderBy(pair => pair.Key)
+                    .Select(pair => $"{pair.Key}:{pair.Value}"));
+                var hapticSummary = string.Join(",", originalHaptics.OrderBy(pair => pair.Key)
+                    .Select(pair => $"{pair.Key}:{pair.Value}"));
+                log($"Telemetry 5s: motor={motorPackets}, padshake={padShakePackets}, " +
+                    $"events=[{eventSummary}], original=[{hapticSummary}].");
+            }
+
+            motorPackets = 0;
+            padShakePackets = 0;
+            events.Clear();
+            originalHaptics.Clear();
+            windowStartedUtc = now;
+        }
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -249,6 +280,7 @@ internal static class Program
                     break;
 
                 case "padshake":
+                    padShakePackets++;
                     haptics.FromGamePadShake(
                         message.Motor,
                         Math.Clamp(message.Value, 0f, 1f),
@@ -256,6 +288,7 @@ internal static class Program
                     break;
 
                 case "motor":
+                    motorPackets++;
                     haptics.SetGameMotor(message.Motor, message.Value);
                     break;
 
@@ -265,6 +298,7 @@ internal static class Program
                     break;
 
                 case "event":
+                    Increment(events, message.Name);
                     GameState latestState;
                     lock (StateGate) latestState = _state;
                     var input = new XInputSnapshot(
@@ -280,14 +314,17 @@ internal static class Program
                     else if (!message.Name.Equals("exceed_input", StringComparison.OrdinalIgnoreCase) &&
                              !message.Name.Equals("ex_act", StringComparison.OrdinalIgnoreCase) &&
                              !message.Name.Equals("max_act", StringComparison.OrdinalIgnoreCase) &&
-                             !message.Name.StartsWith("gun_charge_", StringComparison.OrdinalIgnoreCase))
-                        haptics.PlayOriginal(message.Name);
+                             !message.Name.StartsWith("gun_charge_", StringComparison.OrdinalIgnoreCase) &&
+                             haptics.PlayOriginal(message.Name))
+                        Increment(originalHaptics, message.Name);
 
                     if (message.Name is "exceed_input" or "gun_charge_start" or "gun_charge_level" or
-                        "blue_rose_shot" or "dante_gun_input")
+                        "blue_rose_shot" or "dante_ebony_shot" or "dante_ivory_shot" or "dante_coyote_shot")
                     {
                         log($"Adaptive event {message.Name}: Exceed={AdaptiveTriggers.ExceedMapping}, " +
-                            $"AttackL={AdaptiveTriggers.AttackLargeMapping}, LT={input.LeftTrigger:0.00}, RT={input.RightTrigger:0.00}.");
+                            $"NeroAttackL={AdaptiveTriggers.NeroAttackLargeMapping}, " +
+                            $"DanteAttackL={AdaptiveTriggers.DanteAttackLargeMapping}, " +
+                            $"LT={input.LeftTrigger:0.00}, RT={input.RightTrigger:0.00}.");
                     }
                     break;
 
@@ -296,6 +333,8 @@ internal static class Program
                     Shutdown.Cancel();
                     break;
             }
+
+            FlushDiagnosticsIfDue();
         }
     }
 

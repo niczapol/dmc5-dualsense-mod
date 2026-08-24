@@ -15,16 +15,22 @@ internal sealed class AdaptiveTriggerRuntime
     // so its adaptive effect intentionally remains disabled until an actual
     // trigger press proves that the player remapped the action to L2 or R2.
     private TriggerSide _exceedSide = TriggerSide.Left;
-    private TriggerSide _attackLargeSide;
+    private TriggerSide _neroAttackLargeSide;
+    private TriggerSide _danteAttackLargeSide;
 
     public string ExceedMapping
     {
         get { lock (_gate) return _exceedSide.ToString(); }
     }
 
-    public string AttackLargeMapping
+    public string NeroAttackLargeMapping
     {
-        get { lock (_gate) return _attackLargeSide.ToString(); }
+        get { lock (_gate) return _neroAttackLargeSide.ToString(); }
+    }
+
+    public string DanteAttackLargeMapping
+    {
+        get { lock (_gate) return _danteAttackLargeSide.ToString(); }
     }
 
     public void OnEvent(string eventName, XInputSnapshot input)
@@ -34,18 +40,21 @@ internal sealed class AdaptiveTriggerRuntime
             switch (eventName.ToLowerInvariant())
             {
                 case "exceed_input":
+                case "ex_act":
+                case "max_act":
                     LearnSide(ref _exceedSide, input, 0.08f);
                     break;
 
                 case "gun_charge_start":
                 case "gun_charge_level":
                 case "blue_rose_shot":
-                case "dante_gun_input":
-                case "dante_gun_shot":
+                    LearnSide(ref _neroAttackLargeSide, input, 0.55f);
+                    break;
+
                 case "dante_ebony_shot":
                 case "dante_ivory_shot":
                 case "dante_coyote_shot":
-                    LearnSide(ref _attackLargeSide, input, 0.55f);
+                    LearnSide(ref _danteAttackLargeSide, input, 0.55f);
                     break;
             }
         }
@@ -81,7 +90,7 @@ internal sealed class AdaptiveTriggerRuntime
 
                     // PS5 action AttackL / Blue Rose: power=.5, frequency=0,
                     // start=.5, end=.9 -> exact Weapon(4,8,4).
-                    Apply(ref left, ref right, _attackLargeSide,
+                    Apply(ref left, ref right, _neroAttackLargeSide,
                         TriggerEffect.Weapon(4, 8, ScaleLevel(4, strength)));
                     break;
                 }
@@ -89,7 +98,7 @@ internal sealed class AdaptiveTriggerRuntime
                 case "dante":
                 {
                     var effect = DanteAttackLargeEffect(state.DanteWeaponId, strength);
-                    Apply(ref left, ref right, _attackLargeSide, effect);
+                    Apply(ref left, ref right, _danteAttackLargeSide, effect);
                     break;
                 }
 

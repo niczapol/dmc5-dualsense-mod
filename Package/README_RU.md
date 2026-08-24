@@ -145,10 +145,10 @@ powershell -ExecutionPolicy Bypass -File .\Test-DualSense.ps1 -Quick
 
 ## Диагностика
 
-- `DMC5DualSense\bridge.log` — обнаружение HID, аудиовыхода и входящие события;
+- `DMC5DualSense\bridge.log` — обнаружение HID, аудиовыхода и пятисекундные сводки;
 - `re2_framework_log.txt` — загрузка REFramework и C#-плагина;
 - `reframework\plugins\DMC5DualSense\runtime.log` — игровые hooks и телеметрия;
-- `calibration.csv`, `nero-input.csv`, `padshake.csv` — калибровочные данные, если
+- `calibration.csv`, `nero-input.csv`, `motor.csv`, `padshake.csv` — калибровочные данные, если
   `EnableCalibrationLog` включён.
 
 Если лаунчер не показывает зелёную строку, не запускайте игру обычным способом: сначала

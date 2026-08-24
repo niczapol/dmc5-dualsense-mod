@@ -202,9 +202,8 @@ foreach ($required in @(
     $frameworkZip,
     $csharpZip,
     (Join-Path $PSScriptRoot 'DMC5DualSense.Bridge.exe'),
+    (Join-Path $PSScriptRoot 'DMC5DualSense.Launcher.exe'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.cs'),
-    (Join-Path $PSScriptRoot 'Launch-DMC5.ps1'),
-    (Join-Path $PSScriptRoot 'START-DMC5-WITH-DUALSENSE.cmd'),
     (Join-Path $PSScriptRoot 'Test-DualSense.ps1'),
     (Join-Path $PSScriptRoot 'TEST-DualSense.cmd'),
     (Join-Path $PSScriptRoot 'Uninstall.ps1'),
@@ -286,8 +285,7 @@ try {
     }
 
     Install-OneFile (Join-Path $PSScriptRoot 'DMC5DualSense.Bridge.exe') (Join-Path $modDir 'DMC5DualSense.Bridge.exe')
-    Install-OneFile (Join-Path $PSScriptRoot 'Launch-DMC5.ps1') (Join-Path $modDir 'Launch-DMC5.ps1')
-    Install-OneFile (Join-Path $PSScriptRoot 'START-DMC5-WITH-DUALSENSE.cmd') (Join-Path $modDir 'START-DMC5-WITH-DUALSENSE.cmd')
+    Install-OneFile (Join-Path $PSScriptRoot 'DMC5DualSense.Launcher.exe') (Join-Path $modDir 'DMC5DualSense.Launcher.exe')
     Install-OneFile (Join-Path $PSScriptRoot 'Test-DualSense.ps1') (Join-Path $modDir 'Test-DualSense.ps1')
     Install-OneFile (Join-Path $PSScriptRoot 'TEST-DualSense.cmd') (Join-Path $modDir 'TEST-DualSense.cmd')
     Install-OneFile (Join-Path $PSScriptRoot 'Uninstall.ps1') (Join-Path $modDir 'Uninstall.ps1')
@@ -330,7 +328,7 @@ try {
     }
 
     $manifest = [pscustomobject]@{
-        Version = '1.0.0-authentic'
+        Version = '1.1.0-steam-native'
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
         Files = $records
@@ -342,8 +340,9 @@ try {
     Write-Host ''
     Write-Host 'DMC5 DualSense Layer установлен.' -ForegroundColor Green
     Write-Host "Игра: $resolvedGameDir"
-    Write-Host 'Подключите DualSense по USB и запускайте START-DMC5-WITH-DUALSENSE.cmd из папки DMC5DualSense.'
-    Write-Host 'Лаунчер проверит HID и аудиоканал до запуска игры; обычная кнопка Steam этой гарантии не даёт.'
+    Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
+    Write-Host 'Один раз укажите в Steam -> Свойства -> Параметры запуска:'
+    Write-Host ('"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%') -ForegroundColor Cyan
 }
 catch {
     Restore-PakInvalidations $resolvedGameDir @($pakInvalidations)

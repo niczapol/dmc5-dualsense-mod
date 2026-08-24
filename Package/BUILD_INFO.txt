@@ -1,8 +1,9 @@
-DMC5 DualSense Layer 1.0.0-authentic
+DMC5 DualSense Layer 1.1.0-steam-native
 Built: 2026-08-25
 Target: Devil May Cry 5 Steam, local Build ID 11025947
 Target controller: Sony DualSense CFI-ZCT1W, USB VID_054C/PID_0CE6
 Bridge runtime: .NET 10, win-x64
+Steam launch: hidden DMC5DualSense.Launcher.exe wrapper via %command%
 
 Bridge SHA256:
 6929C2E40F72BCF8A7805AFC5A7C6B4CA055E596FE0451684FD9589322B20AD5

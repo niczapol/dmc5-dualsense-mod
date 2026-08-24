@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 
 namespace DMC5DualSense.Launcher;
 
@@ -14,6 +15,7 @@ internal static class Program
     {
         var baseDirectory = AppContext.BaseDirectory;
         var logPath = Path.Combine(baseDirectory, "launcher.log");
+        var readyPath = Path.Combine(baseDirectory, "bridge.ready.json");
 
         void Log(string message)
         {
@@ -42,12 +44,20 @@ internal static class Program
         {
             StopExistingBridge();
             Thread.Sleep(250);
+            TryDelete(readyPath);
 
             bridge = StartBridge(baseDirectory, Log);
             if (bridge is null)
                 Log("Bridge could not be started; DMC5 will still be launched.");
             else
-                Thread.Sleep(450);
+            {
+                var ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(6));
+                if (ready is null)
+                    Log("Bridge readiness timed out; DMC5 will still be launched.");
+                else
+                    Log($"Bridge ready: controller={ready.ControllerReady}, " +
+                        $"advancedHaptics={ready.AdvancedHapticsReady}, {ready.Description}");
+            }
 
             var gameStart = new ProcessStartInfo
             {
@@ -90,6 +100,7 @@ internal static class Program
                 }
                 bridge.Dispose();
             }
+            TryDelete(readyPath);
         }
     }
 
@@ -144,5 +155,42 @@ internal static class Program
         {
             // No bridge listening is the normal first-launch case.
         }
+    }
+
+    private static BridgeReady? WaitForBridgeReady(string path, int processId, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var status = JsonSerializer.Deserialize<BridgeReady>(File.ReadAllText(path),
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (status?.Pid == processId) return status;
+                }
+            }
+            catch
+            {
+                // The bridge writes the small file atomically enough for the next poll to succeed.
+            }
+            Thread.Sleep(50);
+        }
+        return null;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch { }
+    }
+
+    private sealed class BridgeReady
+    {
+        public int Pid { get; set; }
+        public bool ControllerReady { get; set; }
+        public bool AdvancedHapticsReady { get; set; }
+        public string Description { get; set; } = "";
     }
 }

@@ -22,6 +22,7 @@ internal static class Program
         var baseDirectory = AppContext.BaseDirectory;
         var configPath = Path.Combine(baseDirectory, "config.json");
         var logPath = Path.Combine(baseDirectory, "bridge.log");
+        var readyPath = Path.Combine(baseDirectory, "bridge.ready.json");
         var config = BridgeConfig.Load(configPath);
 
         void Log(string message)
@@ -96,6 +97,7 @@ internal static class Program
 
         using var udp = new UdpClient(new IPEndPoint(IPAddress.Loopback, config.Port));
         Log($"Listening for DMC5 telemetry on 127.0.0.1:{config.Port}.");
+        WriteReadyStatus(readyPath, foundController, audioStarted, controller.Description);
 
         var receiver = ReceiveLoop(udp, haptics, config, Log, Shutdown.Token);
         var output = OutputLoop(controller, haptics, config, Log, Shutdown.Token);
@@ -110,9 +112,40 @@ internal static class Program
         finally
         {
             controller.Reset();
+            TryDelete(readyPath);
         }
 
         return 0;
+    }
+
+    private static void WriteReadyStatus(
+        string path,
+        bool controllerReady,
+        bool advancedHapticsReady,
+        string description)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(new
+            {
+                pid = Environment.ProcessId,
+                controllerReady,
+                advancedHapticsReady,
+                description,
+                utc = DateTime.UtcNow
+            });
+            File.WriteAllText(path, json);
+        }
+        catch
+        {
+            // The launcher also has a timeout; telemetry must work even if status cannot be written.
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch { }
     }
 
     private static async Task RunFullPs5SelfTest(

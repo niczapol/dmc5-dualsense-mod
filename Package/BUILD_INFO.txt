@@ -6,15 +6,15 @@ Bridge runtime: .NET 10, win-x64
 Steam launch: hidden DMC5DualSense.Launcher.exe wrapper via %command%
 
 Bridge SHA256:
-6929C2E40F72BCF8A7805AFC5A7C6B4CA055E596FE0451684FD9589322B20AD5
+8EA764344FB1804657AA29EC8D5D0BF14B033135DDC37051AAB2F325AB4BD718
 Plugin SHA256:
-F0D90B43F29EE82E6810250A3A2BFA2255754CEB38C6D0A23B43B0A4FF83ACE7
+89A6314C6D921822DECC181690F49740B7D433A9C4A6A349F3549D2DB1A72065
 Launcher SHA256:
-D525B79AD8536CCBAC33C0BEA95372E5D73CFAC68E549E9F8F8662D4AFF0C254
-Startup CMD SHA256:
+DFEBA9F204CFAFECF48AAD61DAE86FAE20706F456813C5CD1B3EB1DFEBB79CF7
+Legacy startup CMD SHA256:
 7D613EA210A61761033EF721BD7328F09B351773DD3EC4C16FBF664B3D76F9BE
 Installer SHA256:
-BA29D79C20B57923E1C872F7D5971D6ACD6B8E3685811B8E870C33572C3C34DA
+777BE8557A994DCFD6110ADAC49DB8DC63CE04A92CBB664616FD0A2CA2F4D33A
 Uninstaller SHA256:
 030528D90BEBCAB196D84AD181F3B73B288F1B3CA2F810C2F53F36E339D4E280
 Default config SHA256:
@@ -36,12 +36,14 @@ csharp-api.zip SHA256:
 
 PS5 behavior transferred:
 - exact Nero and Dante adaptive-trigger tables;
+- independent Nero/Dante action-to-trigger learning based on real shots;
 - exact character lightbar RGB table;
 - 12/12 haptic soundbank WAV with Wwise gain/pitch/delay/loop;
 - V and Vergil adaptive triggers remain Off where the PS5 code has no branch.
 
 PC/UI integration:
 - stock PadShake and motor telemetry with a 180 ms release watchdog;
+- post-createShell Ebony/Ivory classification and de-spammed charge events;
 - PlayStation prompts and actual DualSense art;
 - PC c_XB1 GUI nodes patched to internal PS4 geometry for correct D-pad/stick/highlights;
 - exact reversible invalidation of two GUI PAK hash pairs; resource payload is untouched;

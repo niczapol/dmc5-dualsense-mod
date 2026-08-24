@@ -1,4 +1,6 @@
 # .NET build products
+.dotnet/
+.tools/
 **/bin/
 **/obj/
 *.user
@@ -15,6 +17,7 @@ backup/
 
 # Generated package payloads
 Package/DMC5DualSense.Bridge.exe
+Package/DMC5DualSense.Launcher.exe
 Package/DMC5DualSense.cs
 Package/Dependencies/
 Package/Source/
@@ -27,4 +30,3 @@ Package/UI/
 # Local probes
 PluginCheck/obj/
 XInputProbe/obj/
-

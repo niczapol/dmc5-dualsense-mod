@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "audited_at": "2026-08-25",
+  "scanned_bank_files": 48,
+  "bank": {
+    "name": "snd_system.bnk.2.ps5",
+    "size": 325609,
+    "sha256": "63D998A9D1E4BAD82B8E01D61D3B6150FFCCF4EF481E82C4FB5B615C7FBD1BC0"
+  },
+  "events": [
+    { "index": 0, "name": "Coyote_Shot_Shell", "event_id": 2218764858, "media_id": 87828053 },
+    { "index": 1, "name": "Bluerose_Shot_Shell", "event_id": 617671868, "media_id": 683314104 },
+    { "index": 2, "name": "JR_Jigenzan_Shot_Shell", "event_id": 2046878398, "media_id": 297926011 },
+    { "index": 3, "name": "Evony_Shot_Shell", "event_id": 2856129636, "media_id": 511441928 },
+    { "index": 4, "name": "Ivory_Shot_Shell", "event_id": 76979828, "media_id": 1040252522 },
+    { "index": 5, "name": "Jigenzan_Shot_Shell", "event_id": 2674425359, "media_id": 193630586 },
+    { "index": 6, "name": "Beo_Sp_Impact", "event_id": 4016427354, "media_id": 752139616 },
+    { "index": 7, "name": "Mirage_Sp_Loop", "event_id": 3587799209, "media_id": 310261087 },
+    { "index": 8, "name": "Mirage_Sp_End", "event_id": 2267326020, "media_id": 748704802 },
+    { "index": 9, "name": "Beo_Sp_Pre", "event_id": 3571301987, "media_id": 317387691 },
+    { "index": 10, "name": "Yamato_Zetsu_Return", "event_id": 1400738287, "media_id": 564764444 },
+    { "index": 11, "name": "Yamato_Zetsu_Noutou", "event_id": 3489083395, "media_id": 726668428 },
+    { "index": 12, "name": "Stop_All", "event_id": 3853262650, "media_id": null }
+  ],
+  "media": [
+    { "id": 87828053, "offset": 0, "size": 38912, "sha256": "CC063C7DC3E6E2F87F7E677978953705957EC11435425925A3CE5C880D08EA53" },
+    { "id": 193630586, "offset": 38912, "size": 31744, "sha256": "C0222C978EF39B7C7309419EBEFD0172911A9CFF79811900A0D0391AD7FE3E8E" },
+    { "id": 297926011, "offset": 70656, "size": 31232, "sha256": "AD2BDFAE5EDDF306A41DE4047BAA3BCFD669DFDD6F634BC346181EA9C671F0C8" },
+    { "id": 310261087, "offset": 101888, "size": 10496, "sha256": "515CE0ACB959275A2B7F93092C8CC8F693412DEE2B2B9144D057BD5D2CBE026E" },
+    { "id": 317387691, "offset": 112384, "size": 49152, "sha256": "F14257AC0C23D0A68954AEF2F976212A6D1FD9B10FBCA57579FFC3E92C041373" },
+    { "id": 511441928, "offset": 161536, "size": 15616, "sha256": "DACFAFBFC51641AA234F6D83DC32F7F512D222A504E9E28123B224F8F47D4C1E" },
+    { "id": 564764444, "offset": 177152, "size": 13824, "sha256": "DBDC1E3C333E19D6D75D9F18CEA8C2C712DE6FE0162725977C8B838DD529F806" },
+    { "id": 683314104, "offset": 190976, "size": 52224, "sha256": "09CF199ECDE357C189F119782C442D6A80937569518E50E66C3D9D2CECB5025D" },
+    { "id": 726668428, "offset": 243200, "size": 2304, "sha256": "0E6FC9869776825E268C4F50B7B3BC2BAD46F55F1D3412CCA577CEE98D5532A9" },
+    { "id": 748704802, "offset": 245504, "size": 24832, "sha256": "0E002D5D4F5B17214D2890B970412C718D242D71F4FF7FF6F6FD081291448F43" },
+    { "id": 752139616, "offset": 270336, "size": 25600, "sha256": "EF196771FC3CCDBBEC434F69DC813AABEC6E0947D7EBF9E835F72057D3705958" },
+    { "id": 1040252522, "offset": 295936, "size": 21504, "sha256": "DFB732C31DAEFC1EA1DE043C11FDFD13DC541BDF8EF52346E188C18A6CF59B94" }
+  ],
+  "dedicated_samples_absent_for": [
+    "blue_rose_charge_hold",
+    "ex_act",
+    "max_act",
+    "generic_weapon_hit"
+  ]
+}

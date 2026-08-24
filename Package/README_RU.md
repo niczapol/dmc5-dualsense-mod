@@ -145,8 +145,9 @@ powershell -ExecutionPolicy Bypass -File .\Test-DualSense.ps1 -Quick
 ## Диагностика
 
 - `DMC5DualSense\bridge.log` — обнаружение HID, аудиовыхода и пятисекундные сводки;
+- `DMC5DualSense\launcher.log` — готовность моста перед штатным запуском из Steam;
+- `DMC5DualSense\plugin.log` — игровые hooks и отправленные именованные события;
 - `re2_framework_log.txt` — загрузка REFramework и C#-плагина;
-- `reframework\plugins\DMC5DualSense\runtime.log` — игровые hooks и телеметрия;
 - `calibration.csv`, `nero-input.csv`, `motor.csv`, `padshake.csv` — калибровочные данные, если
   `EnableCalibrationLog` включён.
 

@@ -27,7 +27,11 @@ public static class DMC5DualSensePlugin
     private static DateTime _lastActEventUtc = DateTime.MinValue;
     private static DateTime _lastWeaponHitUtc = DateTime.MinValue;
     private static DateTime _lastDanteShotUtc = DateTime.MinValue;
+    private static DateTime _lastBlueRoseShotUtc = DateTime.MinValue;
     private static int _lastExceedStock = -1;
+    private static bool _blueRoseCharging;
+    [ThreadStatic] private static IObject? _pendingDanteShellPlayer;
+    [ThreadStatic] private static int _pendingDanteWeaponId;
     private static readonly List<MethodHook> _hooks = new();
     private static readonly float[] _lastMotorPower = new float[132];
     private static readonly DateTime[] _lastMotorUtc = new DateTime[132];
@@ -82,6 +86,7 @@ public static class DMC5DualSensePlugin
                 SendState("unknown", false, 0, 0, 0, 0, 0);
                 _lastHp = -1;
                 _lastExceedStock = -1;
+                _blueRoseCharging = false;
                 return;
             }
 
@@ -189,6 +194,7 @@ public static class DMC5DualSensePlugin
             LogInfo("PadShake haptics hook installed.");
         }
         else LogError("app.PadShake.requestShake() was not found.");
+        LogMethodCandidates(tdb, "app.PadShake", "requestShake");
 
         InstallPreHook(tdb, "app.PlayerNero", "set_exceedReqTrigger(System.Boolean)", OnExceedInput,
             "Nero Exceed input");
@@ -208,9 +214,8 @@ public static class DMC5DualSensePlugin
             "Blue Rose charge complete");
         InstallPreHook(tdb, "app.PlayerNero", "setBRShot(System.Boolean, System.Boolean)", OnBlueRoseShot,
             "Blue Rose shot HD haptic");
-        InstallPreHook(tdb, "app.PlayerDante", "gunCheck(System.Int32)", OnDanteGunInput,
-            "Dante AttackL input");
-        InstallPreHook(tdb, "app.PlayerDante", "createShell(app.ShellTrack)", OnDanteCreateShell,
+        InstallPrePostHook(tdb, "app.PlayerDante", "createShell(app.ShellTrack)",
+            OnDanteCreateShellPre, OnDanteCreateShellPost,
             "Dante firearm HD haptics");
         LogMethodCandidates(tdb, "app.PlayerDante", "shot");
         LogMethodCandidates(tdb, "app.PlayerDante", "shell");
@@ -265,6 +270,28 @@ public static class DMC5DualSensePlugin
         LogInfo(label + " hook installed.");
     }
 
+    private static void InstallPrePostHook(
+        TDB tdb,
+        string typeName,
+        string signature,
+        MethodHook.PreHookDelegate preCallback,
+        MethodHook.PostHookDelegate postCallback,
+        string label)
+    {
+        var method = tdb.GetType(typeName)?.GetMethod(signature);
+        if (method is null)
+        {
+            LogError("Hook not found: " + typeName + "." + signature);
+            return;
+        }
+
+        var hook = method.AddHook(false);
+        hook.AddPre(preCallback);
+        hook.AddPost(postCallback);
+        _hooks.Add(hook);
+        LogInfo(label + " pre/post hook installed.");
+    }
+
     private static void LogMethodCandidates(TDB tdb, string typeName, string contains)
     {
         try
@@ -298,14 +325,14 @@ public static class DMC5DualSensePlugin
             var frames = Math.Max(0f, ToSingle(shake.Call("get_ShakeFrame")));
             var duration = Math.Clamp(frames / 60f, 0.025f, 2.5f);
 
-            if (motor != 0 && power > 0)
+            if (_enableCalibrationLog && power > 0)
+                LogPadShake(name, motor, power, frames, _lastCharacter);
+
+            if (motor is >= 1 and <= 3 && power > 0)
             {
                 Send("{\"v\":1,\"type\":\"padshake\",\"name\":\"" + Escape(name) +
                      "\",\"motor\":" + motor.ToString(CultureInfo.InvariantCulture) +
                      ",\"value\":" + F(power) + ",\"duration\":" + F(duration) + "}");
-
-                if (_enableCalibrationLog)
-                    LogPadShake(name, motor, power, frames, _lastCharacter);
             }
         }
         catch (Exception ex)
@@ -331,6 +358,8 @@ public static class DMC5DualSensePlugin
             {
                 _lastMotorPower[motor] = power;
                 _lastMotorUtc[motor] = now;
+                if (_enableCalibrationLog)
+                    LogMotor(motor, power, _lastCharacter);
                 Send("{\"v\":1,\"type\":\"motor\",\"motor\":" +
                      motor.ToString(CultureInfo.InvariantCulture) +
                      ",\"value\":" + F(power) + "}");
@@ -395,47 +424,68 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnGunChargeStart(Span<ulong> args)
     {
+        if (_blueRoseCharging) return PreHookResult.Continue;
+        _blueRoseCharging = true;
         SendEvent("gun_charge_start");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnGunChargeLevel(Span<ulong> args)
     {
+        _blueRoseCharging = true;
         SendEvent("gun_charge_level");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnGunChargeEnd(Span<ulong> args)
     {
+        if (!_blueRoseCharging) return PreHookResult.Continue;
+        _blueRoseCharging = false;
         SendEvent("gun_charge_end");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnBlueRoseShot(Span<ulong> args)
     {
+        var now = DateTime.UtcNow;
+        if (now - _lastBlueRoseShotUtc < TimeSpan.FromMilliseconds(35))
+            return PreHookResult.Continue;
+        _lastBlueRoseShotUtc = now;
+        _blueRoseCharging = false;
         SendEvent("blue_rose_shot");
         return PreHookResult.Continue;
     }
 
-    private static PreHookResult OnDanteGunInput(Span<ulong> args)
+    private static PreHookResult OnDanteCreateShellPre(Span<ulong> args)
     {
-        SendEvent("dante_gun_input");
+        try
+        {
+            _pendingDanteShellPlayer = args.Length > 1
+                ? ManagedObject.ToManagedObject(args[1]) as IObject
+                : null;
+            _pendingDanteWeaponId = _pendingDanteShellPlayer is null
+                ? -1
+                : SafeCallInt(_pendingDanteShellPlayer, "get_weaponL_ID");
+        }
+        catch
+        {
+            _pendingDanteShellPlayer = null;
+            _pendingDanteWeaponId = -1;
+        }
         return PreHookResult.Continue;
     }
 
-    private static PreHookResult OnDanteCreateShell(Span<ulong> args)
+    private static void OnDanteCreateShellPost(ref ulong returnValue)
     {
         try
         {
             var now = DateTime.UtcNow;
             if (now - _lastDanteShotUtc < TimeSpan.FromMilliseconds(20))
-                return PreHookResult.Continue;
+                return;
 
-            var player = args.Length > 1 ? ManagedObject.ToManagedObject(args[1]) as IObject : null;
-            if (player is null) return PreHookResult.Continue;
-
-            var weaponId = SafeCallInt(player, "get_weaponL_ID");
-            switch (weaponId)
+            var player = _pendingDanteShellPlayer;
+            if (player is null) return;
+            switch (_pendingDanteWeaponId)
             {
                 case 0: // Ebony & Ivory
                     _lastDanteShotUtc = now;
@@ -454,8 +504,11 @@ public static class DMC5DualSensePlugin
         {
             LogThrottled("Dante firearm haptic error: " + ex.Message);
         }
-
-        return PreHookResult.Continue;
+        finally
+        {
+            _pendingDanteShellPlayer = null;
+            _pendingDanteWeaponId = -1;
+        }
     }
 
     private static PreHookResult OnJudgementCut(Span<ulong> args)
@@ -717,6 +770,21 @@ public static class DMC5DualSensePlugin
                 DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) + "," +
                 EscapeCsv(character) + "," + EscapeCsv(name) + "," +
                 motor.ToString(CultureInfo.InvariantCulture) + "," + F(power) + "," + F(frames) + "\r\n");
+        }
+        catch { }
+    }
+
+    private static void LogMotor(int motor, float power, string character)
+    {
+        try
+        {
+            var path = Path.Combine(_baseDirectory, "motor.csv");
+            if (!File.Exists(path))
+                File.AppendAllText(path, "utc,character,motor,power\r\n");
+            File.AppendAllText(path,
+                DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) + "," +
+                EscapeCsv(character) + "," + motor.ToString(CultureInfo.InvariantCulture) + "," +
+                F(power) + "\r\n");
         }
         catch { }
     }

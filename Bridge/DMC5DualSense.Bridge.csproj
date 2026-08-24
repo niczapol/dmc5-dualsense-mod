@@ -21,4 +21,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\Haptics\*.wav" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DMC5DualSense.LogicTests" />
+  </ItemGroup>
 </Project>

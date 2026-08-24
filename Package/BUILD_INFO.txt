@@ -47,4 +47,4 @@ PC/UI integration:
 - PlayStation prompts and actual DualSense art;
 - PC c_XB1 GUI nodes patched to internal PS4 geometry for correct D-pad/stick/highlights;
 - exact reversible invalidation of two GUI PAK hash pairs; resource payload is untouched;
-- verified launcher waits for writable HID and DualSense audio before starting Steam app 601150.
+- verified launcher waits for the bridge HID/audio readiness report before starting Steam app 601150.

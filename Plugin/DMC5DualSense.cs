@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using REFrameworkNET;
 using REFrameworkNET.Attributes;
@@ -14,6 +15,10 @@ using via.hid;
 public static class DMC5DualSensePlugin
 {
     private const int Port = 27105;
+    // app.PadInput.GameAction values. Passing their underlying Int32 values
+    // avoids coupling the runtime script to generated enum assembly identities.
+    private const int GameActionAttackLarge = 1;
+    private const int GameActionSpecial2 = 14;
     private static UdpClient? _udp;
     private static DateTime _lastStateUtc = DateTime.MinValue;
     private static DateTime _lastErrorUtc = DateTime.MinValue;
@@ -31,6 +36,9 @@ public static class DMC5DualSensePlugin
     private static DateTime _nextMissingPlayerPollUtc = DateTime.MinValue;
     private static int _lastExceedStock = -1;
     private static bool _blueRoseCharging;
+    private static int _lastAttackLargeButton = int.MinValue;
+    private static int _lastSpecial2Button = int.MinValue;
+    private static bool _padManagerLookupLogged;
     private static readonly object _activePlayerGate = new();
     private static ulong _activePlayerAddress;
     private static string _activePlayerCharacter = "unknown";
@@ -47,6 +55,7 @@ public static class DMC5DualSensePlugin
     {
         try
         {
+            HideHostConsole();
             _baseDirectory = Path.Combine(
                 Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory,
                 "DMC5DualSense");
@@ -117,6 +126,7 @@ public static class DMC5DualSensePlugin
             var maxHp = SafeCallSingle(player, "get_maxHp");
             ReadMotion(player, out var motionBank, out var motionId, out var motionFrame);
             ReadGamePad(out var triggerLeft, out var triggerRight);
+            ReadGameActionBindings(out var attackLargeButton, out var special2Button);
 
             var exceedGauge = 0f;
             var exceedGaugeMax = 0f;
@@ -166,7 +176,7 @@ public static class DMC5DualSensePlugin
             SendState(character, true, hp, maxHp, motionBank, motionId, motionFrame,
                 exceedGauge, exceedGaugeMax, exceedStock, exceedRequest,
                 exceedRequestValue, blueRoseChargeLevel, blueRoseTimer, danteWeaponId,
-                triggerLeft, triggerRight);
+                attackLargeButton, special2Button, triggerLeft, triggerRight);
 
             if (_lastHp >= 0 && hp < _lastHp && maxHp > 0)
             {
@@ -201,6 +211,122 @@ public static class DMC5DualSensePlugin
         _lastHp = -1;
         _lastExceedStock = -1;
         _blueRoseCharging = false;
+    }
+
+    private static void ReadGameActionBindings(
+        out int attackLargeButton,
+        out int special2Button)
+    {
+        attackLargeButton = -1;
+        special2Button = -1;
+
+        try
+        {
+            var padManager = ResolvePadManager();
+            var keyAssign = ResolveKeyAssign(padManager);
+            if (keyAssign is null)
+            {
+                LogMissingPadManagerOnce(padManager is null
+                    ? "app.PadManager was not present in the managed singleton registry."
+                    : "Neither PadManager.KeyAssign nor PadManager.padInput.keyAssign was available.");
+                return;
+            }
+
+            attackLargeButton = ToInt(keyAssign.Call(
+                "FindButton", GameActionAttackLarge));
+            special2Button = ToInt(keyAssign.Call(
+                "FindButton", GameActionSpecial2));
+
+            if (attackLargeButton != _lastAttackLargeButton ||
+                special2Button != _lastSpecial2Button)
+            {
+                _lastAttackLargeButton = attackLargeButton;
+                _lastSpecial2Button = special2Button;
+                LogInfo("Control bindings: AttackL=0x" +
+                        attackLargeButton.ToString("X", CultureInfo.InvariantCulture) +
+                        ", Special2=0x" +
+                        special2Button.ToString("X", CultureInfo.InvariantCulture) + ".");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogThrottled("Unable to read controller bindings: " + ex.Message);
+            attackLargeButton = -1;
+            special2Button = -1;
+        }
+    }
+
+    private static void HideHostConsole()
+    {
+        // REFramework may allocate a console owned by DevilMayCry5.exe while it
+        // compiles/loads managed source plugins. The bridge and launcher are
+        // already GUI-subsystem executables, so this is the remaining window the
+        // player can see behind the game.
+        try
+        {
+            var consoleWindow = GetConsoleWindow();
+            if (consoleWindow != IntPtr.Zero) ShowWindow(consoleWindow, 0);
+        }
+        catch
+        {
+            // Console suppression must never prevent the gameplay plugin loading.
+        }
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr window, int command);
+
+    private static IObject? ResolveKeyAssign(IObject? padManager)
+    {
+        if (padManager is null) return null;
+
+        var direct = padManager.Call("get_KeyAssign") as IObject;
+        if (direct is not null) return direct;
+
+        // On the current Steam build PadManager.KeyAssign remains null after
+        // startup. The live per-player assignment table is owned by PadInput.
+        var padInput = padManager.Call("get_padInput") as IObject;
+        return padInput?.Call("get_keyAssign") as IObject;
+    }
+
+    private static IObject? ResolvePadManager()
+    {
+        var exact = API.GetManagedSingleton("app.PadManager") as IObject;
+        if (exact is not null) return exact;
+
+        // Some REFramework builds expose DMC5 application singletons under
+        // their runtime type name rather than the TDB lookup name. Resolve the
+        // registry entry explicitly so controller remaps keep working across
+        // those builds.
+        foreach (var singleton in API.GetManagedSingletons())
+        {
+            var typeName = singleton.Type?.FullName ?? "";
+            if (typeName.Equals("app.PadManager", StringComparison.OrdinalIgnoreCase) ||
+                typeName.EndsWith(".PadManager", StringComparison.OrdinalIgnoreCase))
+                return singleton.Instance;
+        }
+        return null;
+    }
+
+    private static void LogMissingPadManagerOnce(string reason)
+    {
+        if (_padManagerLookupLogged) return;
+        _padManagerLookupLogged = true;
+
+        var padSingletons = new List<string>();
+        foreach (var singleton in API.GetManagedSingletons())
+        {
+            var typeName = singleton.Type?.FullName ?? "";
+            if (typeName.Contains("Pad", StringComparison.OrdinalIgnoreCase) ||
+                typeName.Contains("Input", StringComparison.OrdinalIgnoreCase))
+                padSingletons.Add(typeName);
+        }
+        LogInfo("Controller binding lookup unavailable: " + reason +
+                " Related managed singletons: [" + string.Join(", ", padSingletons) + "].");
     }
 
     private static void InstallGameplayHooks()
@@ -731,6 +857,8 @@ public static class DMC5DualSensePlugin
         int blueRoseChargeLevel = 0,
         float blueRoseTimer = 0,
         int danteWeaponId = -1,
+        int attackLargeButton = -1,
+        int special2Button = -1,
         float triggerLeft = 0,
         float triggerRight = 0)
     {
@@ -748,6 +876,8 @@ public static class DMC5DualSensePlugin
              ",\"blueRoseChargeLevel\":" + blueRoseChargeLevel.ToString(CultureInfo.InvariantCulture) +
              ",\"blueRoseTimer\":" + F(blueRoseTimer) +
              ",\"danteWeaponId\":" + danteWeaponId.ToString(CultureInfo.InvariantCulture) +
+             ",\"attackLargeButton\":" + attackLargeButton.ToString(CultureInfo.InvariantCulture) +
+             ",\"special2Button\":" + special2Button.ToString(CultureInfo.InvariantCulture) +
              ",\"left\":" + F(triggerLeft) + ",\"right\":" + F(triggerRight) + "}");
     }
 

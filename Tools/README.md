@@ -11,7 +11,10 @@ deterministic release ZIP with `CHECKSUMS.txt`.
 system-button prompts while preserving unaffected UI regions.
 
 `GuiLayoutTool` aligns the interactive button positions used by the controls
-menu and The Void with the visible DualSense diagram.
+menu and The Void with the visible DualSense diagram. It also assigns the
+PlayStation-specific active marker shapes and sizes, including the full
+touchpad overlay. Its `inspect` command prints the effective local layout and
+attribute overrides for verification.
 
 `GuiLayoutTool` uses REE-Lib. Its default project reference expects
 REE-Content-Editor in the documented sibling checkout; pass

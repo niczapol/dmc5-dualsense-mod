@@ -2,6 +2,11 @@ namespace DMC5DualSense.Bridge;
 
 internal sealed class AdaptiveTriggerRuntime
 {
+    // via.hid.GamePadButton values used by DMC5's app.pad.KeyAssign.
+    // The top trigger entries are L1/R1; only the bottom entries are L2/R2.
+    private const int LeftTriggerButton = 0x0200;
+    private const int RightTriggerButton = 0x0800;
+
     private enum TriggerSide
     {
         None,
@@ -11,16 +16,9 @@ internal sealed class AdaptiveTriggerRuntime
 
     private readonly object _gate = new();
 
-    // DMC5's stock mapping puts Exceed on L2. AttackL is normally a face button,
-    // so its adaptive effect intentionally remains disabled until an actual
-    // trigger press proves that the player remapped the action to L2 or R2.
-    private TriggerSide _exceedSide = TriggerSide.Left;
+    private TriggerSide _exceedSide;
     private TriggerSide _neroAttackLargeSide;
     private TriggerSide _danteAttackLargeSide;
-    private TriggerSide _neroAttackLargeCandidate;
-    private TriggerSide _danteAttackLargeCandidate;
-    private int _neroAttackLargeCandidateVotes;
-    private int _danteAttackLargeCandidateVotes;
 
     public string ExceedMapping
     {
@@ -37,38 +35,19 @@ internal sealed class AdaptiveTriggerRuntime
         get { lock (_gate) return _danteAttackLargeSide.ToString(); }
     }
 
-    public void OnEvent(string eventName, XInputSnapshot input)
+    public void UpdateBindings(string character, int attackLargeButton, int special2Button)
     {
         lock (_gate)
         {
-            switch (eventName.ToLowerInvariant())
+            switch (character.ToLowerInvariant())
             {
-                case "exceed_input":
-                case "ex_act":
-                case "max_act":
-                    LearnSide(ref _exceedSide, input, 0.08f);
+                case "nero":
+                    _exceedSide = FromButton(special2Button);
+                    _neroAttackLargeSide = FromButton(attackLargeButton);
                     break;
 
-                case "gun_charge_start":
-                case "gun_charge_level":
-                case "blue_rose_shot":
-                    LearnStableSide(
-                        ref _neroAttackLargeSide,
-                        ref _neroAttackLargeCandidate,
-                        ref _neroAttackLargeCandidateVotes,
-                        input,
-                        0.55f);
-                    break;
-
-                case "dante_ebony_shot":
-                case "dante_ivory_shot":
-                case "dante_coyote_shot":
-                    LearnStableSide(
-                        ref _danteAttackLargeSide,
-                        ref _danteAttackLargeCandidate,
-                        ref _danteAttackLargeCandidateVotes,
-                        input,
-                        0.55f);
+                case "dante":
+                    _danteAttackLargeSide = FromButton(attackLargeButton);
                     break;
             }
         }
@@ -139,64 +118,12 @@ internal sealed class AdaptiveTriggerRuntime
             _ => TriggerEffect.Off
         };
 
-    private static void LearnSide(
-        ref TriggerSide side,
-        XInputSnapshot input,
-        float threshold)
+    private static TriggerSide FromButton(int button) => button switch
     {
-        var detected = DetectSide(input, threshold);
-        if (detected != TriggerSide.None) side = detected;
-    }
-
-    private static void LearnStableSide(
-        ref TriggerSide side,
-        ref TriggerSide candidate,
-        ref int candidateVotes,
-        XInputSnapshot input,
-        float threshold)
-    {
-        // AttackL is a face button in the stock layout. One coincidental L2/R2
-        // press during a shot therefore cannot prove that the action was remapped.
-        // Require three consecutive matching shot/charge observations, then lock
-        // the side for the bridge session so ordinary weapon-switch presses cannot
-        // move an already established adaptive effect between the triggers.
-        if (side != TriggerSide.None) return;
-
-        var detected = DetectSide(input, threshold);
-        if (detected == TriggerSide.None)
-        {
-            candidate = TriggerSide.None;
-            candidateVotes = 0;
-            return;
-        }
-
-        if (candidate != detected)
-        {
-            candidate = detected;
-            candidateVotes = 1;
-            return;
-        }
-
-        candidateVotes++;
-        if (candidateVotes < 3) return;
-
-        side = candidate;
-        candidate = TriggerSide.None;
-        candidateVotes = 0;
-    }
-
-    private static TriggerSide DetectSide(XInputSnapshot input, float threshold)
-    {
-        if (!input.Connected) return TriggerSide.None;
-        if (input.LeftTrigger < threshold && input.RightTrigger < threshold)
-            return TriggerSide.None;
-        if (Math.Abs(input.LeftTrigger - input.RightTrigger) < 0.12f)
-            return TriggerSide.None;
-
-        return input.LeftTrigger > input.RightTrigger
-            ? TriggerSide.Left
-            : TriggerSide.Right;
-    }
+        LeftTriggerButton => TriggerSide.Left,
+        RightTriggerButton => TriggerSide.Right,
+        _ => TriggerSide.None
+    };
 
     private static float Read(TriggerSide side, XInputSnapshot input) => side switch
     {

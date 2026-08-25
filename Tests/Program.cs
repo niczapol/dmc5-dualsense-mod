@@ -2,89 +2,60 @@ using DMC5DualSense.Bridge;
 
 var failures = new List<string>();
 
-Run("per-frame Dante gunCheck cannot learn a trigger", () =>
+Run("Dante face-button gun mapping keeps both triggers free", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
-    runtime.OnEvent("dante_gun_input", new XInputSnapshot(true, 0f, 1f));
+    runtime.UpdateBindings("dante", attackLargeButton: 0x20, special2Button: 0);
     var output = runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f));
     Equal(TriggerMode.Off, output.Right.Mode);
     Equal("None", runtime.DanteAttackLargeMapping);
 });
 
-Run("one coincidental Dante trigger press cannot enable resistance", () =>
+Run("repeated shots while R2 is held cannot alter the DMC5 binding", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
-    runtime.OnEvent("dante_ivory_shot", new XInputSnapshot(true, 0f, 1f));
-    var output = runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f));
-    Equal(TriggerMode.Off, output.Right.Mode);
+    runtime.UpdateBindings("dante", attackLargeButton: 0x20, special2Button: 0);
+    for (var i = 0; i < 20; i++)
+        runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f));
     Equal("None", runtime.DanteAttackLargeMapping);
+    Equal(TriggerMode.Off, runtime.Build(
+        State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f)).Right.Mode);
 });
 
-Run("three consistent Dante shots learn and lock the physical trigger", () =>
+Run("Dante gun resistance follows an explicit R2 remap", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
-    for (var i = 0; i < 3; i++)
-        runtime.OnEvent("dante_ivory_shot", new XInputSnapshot(true, 0f, 1f));
-
-    var output = runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f));
+    runtime.UpdateBindings("dante", attackLargeButton: 0x0800, special2Button: 0);
+    var output = runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 0f));
     Equal(TriggerMode.Weapon, output.Right.Mode);
     Equal((byte)4, output.Right.Position);
     Equal((byte)5, output.Right.EndPosition);
     Equal("Right", runtime.DanteAttackLargeMapping);
-
-    for (var i = 0; i < 6; i++)
-        runtime.OnEvent("dante_ivory_shot", new XInputSnapshot(true, 1f, 0f));
-    Equal("Right", runtime.DanteAttackLargeMapping);
 });
 
-Run("Nero and Dante AttackL mappings are isolated", () =>
+Run("Dante remap changes take effect without restarting", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
-    for (var i = 0; i < 3; i++)
-        runtime.OnEvent("dante_coyote_shot", new XInputSnapshot(true, 0f, 1f));
-    var nero = runtime.Build(State("nero"), Config(), new XInputSnapshot(true, 0f, 1f));
-    Equal(TriggerMode.Off, nero.Right.Mode);
-    Equal("None", runtime.NeroAttackLargeMapping);
-    Equal("Right", runtime.DanteAttackLargeMapping);
+    runtime.UpdateBindings("dante", attackLargeButton: 0x0800, special2Button: 0);
+    Equal(TriggerMode.Weapon, runtime.Build(
+        State("dante", 1), Config(), new XInputSnapshot(true, 0f, 0f)).Right.Mode);
+
+    runtime.UpdateBindings("dante", attackLargeButton: 0x0200, special2Button: 0);
+    var output = runtime.Build(State("dante", 1), Config(), new XInputSnapshot(true, 0f, 0f));
+    Equal(TriggerMode.Weapon, output.Left.Mode);
+    Equal(TriggerMode.Off, output.Right.Mode);
+    Equal("Left", runtime.DanteAttackLargeMapping);
 });
 
-Run("alternating incidental shots never choose a Dante trigger", () =>
+Run("Nero bindings are read independently from the active layout", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
-    for (var i = 0; i < 12; i++)
-    {
-        var input = i % 2 == 0
-            ? new XInputSnapshot(true, 1f, 0f)
-            : new XInputSnapshot(true, 0f, 1f);
-        runtime.OnEvent("dante_ivory_shot", input);
-    }
-
-    Equal("None", runtime.DanteAttackLargeMapping);
-    Equal(TriggerMode.Off,
-        runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 0f)).Left.Mode);
-});
-
-Run("Nero AttackL also requires stable remap evidence", () =>
-{
-    var runtime = new AdaptiveTriggerRuntime();
-    runtime.OnEvent("blue_rose_shot", new XInputSnapshot(true, 0f, 1f));
-    Equal("None", runtime.NeroAttackLargeMapping);
-
-    runtime.OnEvent("blue_rose_shot", new XInputSnapshot(true, 0f, 1f));
-    runtime.OnEvent("blue_rose_shot", new XInputSnapshot(true, 0f, 1f));
-    Equal("Right", runtime.NeroAttackLargeMapping);
-    Equal(TriggerMode.Weapon,
-        runtime.Build(State("nero"), Config(), new XInputSnapshot(true, 0f, 1f)).Right.Mode);
-});
-
-Run("EX-Act can recover a remapped Exceed side", () =>
-{
-    var runtime = new AdaptiveTriggerRuntime();
-    runtime.OnEvent("ex_act", new XInputSnapshot(true, 0f, 0.9f));
+    runtime.UpdateBindings("nero", attackLargeButton: 0x0800, special2Button: 0x0200);
     var output = runtime.Build(State("nero"), Config(), new XInputSnapshot(true, 0f, 0.9f));
-    Equal(TriggerMode.Off, output.Left.Mode);
-    Equal(TriggerMode.Vibration, output.Right.Mode);
-    Equal("Right", runtime.ExceedMapping);
+    Equal(TriggerMode.Vibration, output.Left.Mode);
+    Equal(TriggerMode.Weapon, output.Right.Mode);
+    Equal("Left", runtime.ExceedMapping);
+    Equal("Right", runtime.NeroAttackLargeMapping);
 });
 
 Run("neutral USB DualSense input maps to neutral XInput", () =>
@@ -121,6 +92,18 @@ Run("DualSense controls map atomically to the expected Xbox report", () =>
     Equal(short.MaxValue, input.LeftThumbY);
     Equal(short.MaxValue, input.RightThumbX);
     Equal((short)-32767, input.RightThumbY);
+});
+
+Run("DualSense touchpad click maps to Xbox Back and releases cleanly", () =>
+{
+    var bytes = NeutralDualSenseReport();
+    bytes[10] = 0x02;
+    Equal(true, DualSenseInputReport.TryParse(bytes, out var pressed));
+    Equal((ushort)0x0020, pressed.Buttons);
+
+    bytes[10] = 0;
+    Equal(true, DualSenseInputReport.TryParse(bytes, out var released));
+    Equal((ushort)0, released.Buttons);
 });
 
 if (failures.Count > 0)
@@ -172,4 +155,4 @@ static byte[] NeutralDualSenseReport()
 
 static GameState State(string character, int danteWeaponId = -1) => new(
     character, true, 100, 100, 0, 0, 0,
-    0, 0, 0, false, 0, 0, 0, danteWeaponId, 0, 0, DateTime.UtcNow);
+    0, 0, 0, false, 0, 0, 0, danteWeaponId, -1, -1, 0, 0, DateTime.UtcNow);

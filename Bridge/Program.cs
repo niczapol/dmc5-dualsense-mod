@@ -391,7 +391,15 @@ internal static class Program
                         true,
                         Math.Clamp(message.Left > 0 ? message.Left : latestState.TriggerLeft, 0f, 1f),
                         Math.Clamp(message.Right > 0 ? message.Right : latestState.TriggerRight, 0f, 1f));
+                    var mappingsBefore = (
+                        AdaptiveTriggers.ExceedMapping,
+                        AdaptiveTriggers.NeroAttackLargeMapping,
+                        AdaptiveTriggers.DanteAttackLargeMapping);
                     AdaptiveTriggers.OnEvent(message.Name, input);
+                    var mappingsAfter = (
+                        AdaptiveTriggers.ExceedMapping,
+                        AdaptiveTriggers.NeroAttackLargeMapping,
+                        AdaptiveTriggers.DanteAttackLargeMapping);
 
                     if (message.Name.Equals("weapon_hit", StringComparison.OrdinalIgnoreCase) &&
                         config.AdaptiveProfile.Equals("Enhanced", StringComparison.OrdinalIgnoreCase))
@@ -404,12 +412,12 @@ internal static class Program
                              haptics.PlayOriginal(message.Name))
                         Increment(originalHaptics, message.Name);
 
-                    if (message.Name is "exceed_input" or "gun_charge_start" or "gun_charge_level" or
-                        "blue_rose_shot" or "dante_ebony_shot" or "dante_ivory_shot" or "dante_coyote_shot")
+                    if (mappingsAfter != mappingsBefore)
                     {
-                        log($"Adaptive event {message.Name}: Exceed={AdaptiveTriggers.ExceedMapping}, " +
-                            $"NeroAttackL={AdaptiveTriggers.NeroAttackLargeMapping}, " +
-                            $"DanteAttackL={AdaptiveTriggers.DanteAttackLargeMapping}, " +
+                        log($"Adaptive mapping changed after {message.Name}: " +
+                            $"Exceed={mappingsAfter.Item1}, " +
+                            $"NeroAttackL={mappingsAfter.Item2}, " +
+                            $"DanteAttackL={mappingsAfter.Item3}, " +
                             $"LT={input.LeftTrigger:0.00}, RT={input.RightTrigger:0.00}.");
                     }
                     break;

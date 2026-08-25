@@ -31,8 +31,13 @@ public static class DMC5DualSensePlugin
     private static DateTime _nextMissingPlayerPollUtc = DateTime.MinValue;
     private static int _lastExceedStock = -1;
     private static bool _blueRoseCharging;
+    private static readonly object _activePlayerGate = new();
+    private static ulong _activePlayerAddress;
+    private static string _activePlayerCharacter = "unknown";
     [ThreadStatic] private static IObject? _pendingDanteShellPlayer;
     [ThreadStatic] private static int _pendingDanteWeaponId;
+    [ThreadStatic] private static bool _pendingDanteEbonyShot;
+    [ThreadStatic] private static bool _danteShellPending;
     private static readonly List<MethodHook> _hooks = new();
     private static readonly float[] _lastMotorPower = new float[132];
     private static readonly DateTime[] _lastMotorUtc = new DateTime[132];
@@ -65,6 +70,7 @@ public static class DMC5DualSensePlugin
     [PluginExitPoint]
     public static void OnUnload()
     {
+        ClearActivePlayer();
         _udp?.Dispose();
         _udp = null;
         LogInfo("Plugin unloaded.");
@@ -80,11 +86,10 @@ public static class DMC5DualSensePlugin
         try
         {
             var manager = API.GetManagedSingleton("app.PlayerManager") as IObject;
-            // manualPlayer, hp and maxHp are inherited runtime fields. REFramework's
-            // TypeDefinition.Fields enumeration does not include them consistently,
-            // although direct GetField access does. Enumerating first caused every
-            // live player to be reported as missing and disabled adaptive triggers.
-            var player = manager?.GetField("manualPlayer") as IObject;
+            // Use the reflected accessors instead of the IObject.GetField API. It
+            // returns the inherited values but also emits "Member not found" on the
+            // concrete type every frame, producing hundreds of thousands of lines.
+            var player = manager?.Call("get_manualPlayer") as IObject;
 
             if (player is null)
             {
@@ -100,6 +105,7 @@ public static class DMC5DualSensePlugin
             }
 
             _nextMissingPlayerPollUtc = DateTime.MinValue;
+            SetActivePlayer(player, character);
 
             if (!_playerTypeDumped)
             {
@@ -107,8 +113,8 @@ public static class DMC5DualSensePlugin
                 _playerTypeDumped = true;
             }
 
-            var hp = ToSingle(player.GetField("hp"));
-            var maxHp = ToSingle(player.GetField("maxHp"));
+            var hp = SafeCallSingle(player, "get_hp");
+            var maxHp = SafeCallSingle(player, "get_maxHp");
             ReadMotion(player, out var motionBank, out var motionId, out var motionFrame);
             ReadGamePad(out var triggerLeft, out var triggerRight);
 
@@ -190,6 +196,7 @@ public static class DMC5DualSensePlugin
     private static void PublishMissingPlayerState()
     {
         _nextMissingPlayerPollUtc = DateTime.UtcNow.AddMilliseconds(750);
+        ClearActivePlayer();
         SendState("unknown", false, 0, 0, 0, 0, 0);
         _lastHp = -1;
         _lastExceedStock = -1;
@@ -231,6 +238,8 @@ public static class DMC5DualSensePlugin
         InstallPrePostHook(tdb, "app.PlayerDante", "createShell(app.ShellTrack)",
             OnDanteCreateShellPre, OnDanteCreateShellPost,
             "Dante firearm HD haptics");
+        InstallPreHook(tdb, "app.PlayerDante", "set_isEbonyShot(System.Boolean)",
+            OnDanteEbonyShotSelected, "Dante Ebony/Ivory selector");
         LogMethodCandidates(tdb, "app.PlayerDante", "shot");
         LogMethodCandidates(tdb, "app.PlayerDante", "shell");
         InstallPreHook(tdb, "app.PlayerVergilPL", "onChargeCompleteJudgementCut()", OnJudgementCut,
@@ -357,12 +366,14 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnExceedInput(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "nero")) return PreHookResult.Continue;
         if (args.Length > 2 && (args[2] & 1) != 0) SendEvent("exceed_input");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnMaxAct(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "nero")) return PreHookResult.Continue;
         if (args.Length > 2 && (args[2] & 1) != 0) SendActEvent("max_act");
         return PreHookResult.Continue;
     }
@@ -371,6 +382,7 @@ public static class DMC5DualSensePlugin
     {
         try
         {
+            if (!IsActiveCharacter("nero")) return PreHookResult.Continue;
             if (args.Length < 5) return PreHookResult.Continue;
             var amount = unchecked((int)args[2]);
             var isJustFullThrottle = (args[4] & 1) != 0;
@@ -395,6 +407,7 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnWeaponHit(Span<ulong> args)
     {
+        if (!IsActivePlayer(args)) return PreHookResult.Continue;
         var now = DateTime.UtcNow;
         if (now - _lastWeaponHitUtc >= TimeSpan.FromMilliseconds(32))
         {
@@ -406,6 +419,7 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnGunChargeStart(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "nero")) return PreHookResult.Continue;
         if (_blueRoseCharging) return PreHookResult.Continue;
         _blueRoseCharging = true;
         SendEvent("gun_charge_start");
@@ -414,6 +428,7 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnGunChargeLevel(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "nero")) return PreHookResult.Continue;
         _blueRoseCharging = true;
         SendEvent("gun_charge_level");
         return PreHookResult.Continue;
@@ -421,6 +436,7 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnGunChargeEnd(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "nero")) return PreHookResult.Continue;
         if (!_blueRoseCharging) return PreHookResult.Continue;
         _blueRoseCharging = false;
         SendEvent("gun_charge_end");
@@ -429,6 +445,7 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnBlueRoseShot(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "nero")) return PreHookResult.Continue;
         var now = DateTime.UtcNow;
         if (now - _lastBlueRoseShotUtc < TimeSpan.FromMilliseconds(35))
             return PreHookResult.Continue;
@@ -440,20 +457,38 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnDanteCreateShellPre(Span<ulong> args)
     {
+        _pendingDanteShellPlayer = null;
+        _pendingDanteWeaponId = -1;
+        _pendingDanteEbonyShot = false;
+        _danteShellPending = false;
+
         try
         {
+            if (!IsActivePlayer(args, "dante")) return PreHookResult.Continue;
             _pendingDanteShellPlayer = args.Length > 1
                 ? ManagedObject.ToManagedObject(args[1]) as IObject
                 : null;
             _pendingDanteWeaponId = _pendingDanteShellPlayer is null
                 ? -1
                 : SafeCallInt(_pendingDanteShellPlayer, "get_weaponL_ID");
+            _pendingDanteEbonyShot = _pendingDanteShellPlayer is not null &&
+                SafeCallBool(_pendingDanteShellPlayer, "get_isEbonyShot");
+            _danteShellPending = _pendingDanteShellPlayer is not null;
         }
         catch
         {
             _pendingDanteShellPlayer = null;
             _pendingDanteWeaponId = -1;
+            _pendingDanteEbonyShot = false;
+            _danteShellPending = false;
         }
+        return PreHookResult.Continue;
+    }
+
+    private static PreHookResult OnDanteEbonyShotSelected(Span<ulong> args)
+    {
+        if (_danteShellPending && IsActivePlayer(args, "dante") && args.Length > 2)
+            _pendingDanteEbonyShot = (args[2] & 1) != 0;
         return PreHookResult.Continue;
     }
 
@@ -471,7 +506,7 @@ public static class DMC5DualSensePlugin
             {
                 case 0: // Ebony & Ivory
                     _lastDanteShotUtc = now;
-                    SendEvent(SafeCallBool(player, "get_isEbonyShot")
+                    SendEvent(_pendingDanteEbonyShot
                         ? "dante_ebony_shot"
                         : "dante_ivory_shot");
                     break;
@@ -490,11 +525,14 @@ public static class DMC5DualSensePlugin
         {
             _pendingDanteShellPlayer = null;
             _pendingDanteWeaponId = -1;
+            _pendingDanteEbonyShot = false;
+            _danteShellPending = false;
         }
     }
 
     private static PreHookResult OnJudgementCut(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "vergil")) return PreHookResult.Continue;
         try
         {
             var player = args.Length > 1 ? ManagedObject.ToManagedObject(args[1]) as IObject : null;
@@ -511,6 +549,7 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnJudgementCutEnd(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "vergil")) return PreHookResult.Continue;
         SendEvent("yamato_return");
         SendEvent("yamato_noutou");
         return PreHookResult.Continue;
@@ -518,24 +557,28 @@ public static class DMC5DualSensePlugin
 
     private static PreHookResult OnBeowulfPre(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "vergil")) return PreHookResult.Continue;
         SendEvent("beowulf_pre");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnBeowulfImpact(Span<ulong> args)
     {
+        if (!IsActivePlayer(args, "vergil")) return PreHookResult.Continue;
         SendEvent("beowulf_impact");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnMirageLoop(Span<ulong> args)
     {
+        if (!IsActiveCharacter("vergil")) return PreHookResult.Continue;
         SendEvent("mirage_loop");
         return PreHookResult.Continue;
     }
 
     private static PreHookResult OnMirageEnd(Span<ulong> args)
     {
+        if (!IsActiveCharacter("vergil")) return PreHookResult.Continue;
         SendEvent("mirage_end");
         return PreHookResult.Continue;
     }
@@ -634,28 +677,42 @@ public static class DMC5DualSensePlugin
                lower.Contains("pl0200") || lower.Contains("pl0400");
     }
 
-    private static object? GetFieldIfPresent(IObject instance, string fieldName)
+    private static void SetActivePlayer(IObject player, string character)
     {
-        try
+        lock (_activePlayerGate)
         {
-            var type = instance.GetTypeDefinition();
-            while (type is not null)
-            {
-                foreach (var field in type.Fields)
-                {
-                    if (field.Name.Equals(fieldName, StringComparison.Ordinal))
-                        return instance.GetField(fieldName);
-                }
-
-                type = type.ParentType;
-            }
+            _activePlayerAddress = player.GetAddress();
+            _activePlayerCharacter = character;
         }
-        catch
+    }
+
+    private static void ClearActivePlayer()
+    {
+        lock (_activePlayerGate)
         {
-            // Runtime objects can disappear between lookup and access.
+            _activePlayerAddress = 0;
+            _activePlayerCharacter = "unknown";
         }
+    }
 
-        return null;
+    private static bool IsActiveCharacter(string expectedCharacter)
+    {
+        lock (_activePlayerGate)
+            return _activePlayerAddress != 0 &&
+                   _activePlayerCharacter.Equals(expectedCharacter,
+                       StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsActivePlayer(Span<ulong> args, string? expectedCharacter = null)
+    {
+        if (args.Length <= 1 || args[1] == 0) return false;
+        lock (_activePlayerGate)
+        {
+            return _activePlayerAddress == args[1] &&
+                   (expectedCharacter is null ||
+                    _activePlayerCharacter.Equals(expectedCharacter,
+                        StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     private static void SendState(

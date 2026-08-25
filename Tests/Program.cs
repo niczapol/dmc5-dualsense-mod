@@ -11,25 +11,70 @@ Run("per-frame Dante gunCheck cannot learn a trigger", () =>
     Equal("None", runtime.DanteAttackLargeMapping);
 });
 
-Run("a real Dante shot learns the physical trigger", () =>
+Run("one coincidental Dante trigger press cannot enable resistance", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
     runtime.OnEvent("dante_ivory_shot", new XInputSnapshot(true, 0f, 1f));
     var output = runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f));
+    Equal(TriggerMode.Off, output.Right.Mode);
+    Equal("None", runtime.DanteAttackLargeMapping);
+});
+
+Run("three consistent Dante shots learn and lock the physical trigger", () =>
+{
+    var runtime = new AdaptiveTriggerRuntime();
+    for (var i = 0; i < 3; i++)
+        runtime.OnEvent("dante_ivory_shot", new XInputSnapshot(true, 0f, 1f));
+
+    var output = runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 1f));
     Equal(TriggerMode.Weapon, output.Right.Mode);
     Equal((byte)4, output.Right.Position);
     Equal((byte)5, output.Right.EndPosition);
+    Equal("Right", runtime.DanteAttackLargeMapping);
+
+    for (var i = 0; i < 6; i++)
+        runtime.OnEvent("dante_ivory_shot", new XInputSnapshot(true, 1f, 0f));
     Equal("Right", runtime.DanteAttackLargeMapping);
 });
 
 Run("Nero and Dante AttackL mappings are isolated", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();
-    runtime.OnEvent("dante_coyote_shot", new XInputSnapshot(true, 0f, 1f));
+    for (var i = 0; i < 3; i++)
+        runtime.OnEvent("dante_coyote_shot", new XInputSnapshot(true, 0f, 1f));
     var nero = runtime.Build(State("nero"), Config(), new XInputSnapshot(true, 0f, 1f));
     Equal(TriggerMode.Off, nero.Right.Mode);
     Equal("None", runtime.NeroAttackLargeMapping);
     Equal("Right", runtime.DanteAttackLargeMapping);
+});
+
+Run("alternating incidental shots never choose a Dante trigger", () =>
+{
+    var runtime = new AdaptiveTriggerRuntime();
+    for (var i = 0; i < 12; i++)
+    {
+        var input = i % 2 == 0
+            ? new XInputSnapshot(true, 1f, 0f)
+            : new XInputSnapshot(true, 0f, 1f);
+        runtime.OnEvent("dante_ivory_shot", input);
+    }
+
+    Equal("None", runtime.DanteAttackLargeMapping);
+    Equal(TriggerMode.Off,
+        runtime.Build(State("dante", 0), Config(), new XInputSnapshot(true, 0f, 0f)).Left.Mode);
+});
+
+Run("Nero AttackL also requires stable remap evidence", () =>
+{
+    var runtime = new AdaptiveTriggerRuntime();
+    runtime.OnEvent("blue_rose_shot", new XInputSnapshot(true, 0f, 1f));
+    Equal("None", runtime.NeroAttackLargeMapping);
+
+    runtime.OnEvent("blue_rose_shot", new XInputSnapshot(true, 0f, 1f));
+    runtime.OnEvent("blue_rose_shot", new XInputSnapshot(true, 0f, 1f));
+    Equal("Right", runtime.NeroAttackLargeMapping);
+    Equal(TriggerMode.Weapon,
+        runtime.Build(State("nero"), Config(), new XInputSnapshot(true, 0f, 1f)).Right.Mode);
 });
 
 Run("EX-Act can recover a remapped Exceed side", () =>

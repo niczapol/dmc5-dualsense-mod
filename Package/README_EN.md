@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.5.2
+# DMC5 DualSense Layer 1.5.3
 
 Unofficial native DualSense support for the Windows Steam version of Devil May
 Cry 5. The mod adds adaptive triggers, advanced haptics, character lightbar
@@ -54,9 +54,12 @@ for the DMC5 session, and restores the original state after the game exits.
 The default `Authentic` profile follows the trigger branches and named haptic
 events found in the PS5 version. A face button cannot physically gain trigger
 resistance. Blue Rose therefore gets adaptive resistance only when its action
-is mapped to L2 or R2. The PS5 soundbank has no separate named sample for every
-ordinary sword hit, Blue Rose hold, EX-Act, or MAX-Act; ordinary PC rumble still
-feeds the DualSense actuators for actions where the game emits it.
+is mapped to L2 or R2. Remap detection requires three consecutive gameplay events
+on the same physical trigger and then locks that side for the game session, so an
+incidental trigger press cannot move the effect. The PS5 soundbank has no separate
+named sample for every ordinary sword hit, Blue Rose hold, EX-Act, or MAX-Act;
+ordinary PC rumble still feeds the DualSense actuators for actions where the game
+emits it.
 
 The extracted PS5 logic has no V-specific adaptive-trigger branch or named V
 haptic sample. V uses the purple character light and DMC5's ordinary motor

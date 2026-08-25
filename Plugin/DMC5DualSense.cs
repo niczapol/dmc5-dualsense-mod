@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using REFrameworkNET;
 using REFrameworkNET.Attributes;
@@ -37,6 +38,7 @@ public static class DMC5DualSensePlugin
     private static bool _blueRoseCharging;
     private static int _lastAttackLargeButton = int.MinValue;
     private static int _lastSpecial2Button = int.MinValue;
+    private static bool _padManagerLookupLogged;
     private static readonly object _activePlayerGate = new();
     private static ulong _activePlayerAddress;
     private static string _activePlayerCharacter = "unknown";
@@ -53,6 +55,7 @@ public static class DMC5DualSensePlugin
     {
         try
         {
+            HideHostConsole();
             _baseDirectory = Path.Combine(
                 Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory,
                 "DMC5DualSense");
@@ -219,9 +222,15 @@ public static class DMC5DualSensePlugin
 
         try
         {
-            var padManager = API.GetManagedSingleton("app.PadManager") as IObject;
-            var keyAssign = padManager?.Call("get_KeyAssign") as IObject;
-            if (keyAssign is null) return;
+            var padManager = ResolvePadManager();
+            var keyAssign = ResolveKeyAssign(padManager);
+            if (keyAssign is null)
+            {
+                LogMissingPadManagerOnce(padManager is null
+                    ? "app.PadManager was not present in the managed singleton registry."
+                    : "Neither PadManager.KeyAssign nor PadManager.padInput.keyAssign was available.");
+                return;
+            }
 
             attackLargeButton = ToInt(keyAssign.Call(
                 "FindButton", GameActionAttackLarge));
@@ -245,6 +254,79 @@ public static class DMC5DualSensePlugin
             attackLargeButton = -1;
             special2Button = -1;
         }
+    }
+
+    private static void HideHostConsole()
+    {
+        // REFramework may allocate a console owned by DevilMayCry5.exe while it
+        // compiles/loads managed source plugins. The bridge and launcher are
+        // already GUI-subsystem executables, so this is the remaining window the
+        // player can see behind the game.
+        try
+        {
+            var consoleWindow = GetConsoleWindow();
+            if (consoleWindow != IntPtr.Zero) ShowWindow(consoleWindow, 0);
+        }
+        catch
+        {
+            // Console suppression must never prevent the gameplay plugin loading.
+        }
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr window, int command);
+
+    private static IObject? ResolveKeyAssign(IObject? padManager)
+    {
+        if (padManager is null) return null;
+
+        var direct = padManager.Call("get_KeyAssign") as IObject;
+        if (direct is not null) return direct;
+
+        // On the current Steam build PadManager.KeyAssign remains null after
+        // startup. The live per-player assignment table is owned by PadInput.
+        var padInput = padManager.Call("get_padInput") as IObject;
+        return padInput?.Call("get_keyAssign") as IObject;
+    }
+
+    private static IObject? ResolvePadManager()
+    {
+        var exact = API.GetManagedSingleton("app.PadManager") as IObject;
+        if (exact is not null) return exact;
+
+        // Some REFramework builds expose DMC5 application singletons under
+        // their runtime type name rather than the TDB lookup name. Resolve the
+        // registry entry explicitly so controller remaps keep working across
+        // those builds.
+        foreach (var singleton in API.GetManagedSingletons())
+        {
+            var typeName = singleton.Type?.FullName ?? "";
+            if (typeName.Equals("app.PadManager", StringComparison.OrdinalIgnoreCase) ||
+                typeName.EndsWith(".PadManager", StringComparison.OrdinalIgnoreCase))
+                return singleton.Instance;
+        }
+        return null;
+    }
+
+    private static void LogMissingPadManagerOnce(string reason)
+    {
+        if (_padManagerLookupLogged) return;
+        _padManagerLookupLogged = true;
+
+        var padSingletons = new List<string>();
+        foreach (var singleton in API.GetManagedSingletons())
+        {
+            var typeName = singleton.Type?.FullName ?? "";
+            if (typeName.Contains("Pad", StringComparison.OrdinalIgnoreCase) ||
+                typeName.Contains("Input", StringComparison.OrdinalIgnoreCase))
+                padSingletons.Add(typeName);
+        }
+        LogInfo("Controller binding lookup unavailable: " + reason +
+                " Related managed singletons: [" + string.Join(", ", padSingletons) + "].");
     }
 
     private static void InstallGameplayHooks()

@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.3.0 Authentic
+# DMC5 DualSense Layer 1.4.0 Authentic
 
 Локальный пакет полной поддержки Sony DualSense CFI-ZCT1W для Steam-версии
 Devil May Cry 5 на Windows. Он добавляет адаптивные курки, HD-вибрацию,
@@ -25,28 +25,31 @@ Devil May Cry 5 на Windows. Он добавляет адаптивные ку�
 - повторно сжимаются только прямоугольники нового контроллера и Create/Options:
   остальные PlayStation-иконки копируются исходными BC7-блоками без потери чёткости.
 
-Steam Input остаётся включённым и отвечает только за ввод и пользовательскую раскладку.
-Плагин не подменяет нажатия и не ломает переподключение контроллера.
+Steam Input для DMC5 должен быть отключён. В прежней схеме он посылал игре
+XInput, но одновременно перезаписывал HID-выход DualSense, из-за чего курки и вибрация
+могли полностью исчезать. Теперь bridge читает физический DualSense напрямую и атомарно
+передаёт его полное состояние в виртуальный Xbox 360 контроллер через ViGEmBus. DMC5 получает
+обычный XInput, а bridge остаётся единственным источником физического отклика.
 
 ## Штатный запуск через Steam
 
 1. Подключите DualSense USB-кабелем.
 2. Закройте PlayStation Accessories, DS4Windows и DualSenseX.
-3. Оставьте Steam Input включённым для DMC5.
+3. В Steam откройте `DMC5 -> Свойства -> Контроллер` и выберите
+   `Отключить систему ввода Steam`.
 4. Один раз откройте свойства DMC5 в Steam и вставьте в «Параметры запуска» строку,
    которую напечатал установщик.
 5. После этого запускайте игру обычной кнопкой «Играть» в Steam.
 
 Установщик регистрирует невидимый `DMC5DualSense.Launcher.exe --background` в
-автозапуске текущего пользователя. Фоновый bridge заранее открывает физический HID,
-пока Steam Input ещё не переключил контроллер в виртуальный XInput-режим. При нажатии
-«Играть» Steam-launcher повторно использует уже готовый bridge, запускает DMC5 и не
-закрывает фоновый процесс после выхода из игры. Консольных окон нет.
+автозапуске текущего пользователя. Фоновый bridge открывает вход и выход физического
+DualSense, создаёт виртуальный Xbox 360 контроллер и перед запуском игры подтверждает все
+четыре тракта: HID-выход, четырёхканальный haptics-звук, прямой HID-ввод и ViGEm XInput. При
+нажатии «Играть» Steam-launcher повторно использует готовый bridge. Консольных окон нет.
 
-Если фоновый bridge ещё не запущен, Steam-launcher поднимет временный процесс как
-запасной вариант. Это не так надёжно: Steam Input может скрыть raw HID ещё до выполнения
-параметров запуска. Поэтому запись автозапуска является частью установки, а не
-необязательной оптимизацией.
+Если фонового bridge нет, Steam-launcher запускает временный процесс с той же проверкой готовности.
+Без ViGEmBus установщик останавливается с ясной ошибкой. Драйвер не удаляется вместе с модом,
+потому что он может использоваться другими программами.
 
 PlayStation Accessories нужна для обновления прошивки и настройки контроллера, но не
 добавляет поддержку DualSense старым PC-играм. На время DMC5 её лучше закрывать.
@@ -138,6 +141,8 @@ powershell -ExecutionPolicy Bypass -File .\Test-DualSense.ps1 -Quick
 - `TriggerStrength`, `HapticsStrength`, `LightbarStrength`: сила от `0.0` до `1.0`.
 - `EnableAdaptiveTriggers`, `EnableAdvancedHaptics`, `EnableLightbar`: отдельное
   включение трёх трактов.
+- `EnableVirtualXInput`: прямой ввод DualSense и виртуальный XInput; для штатной
+  изолированной схемы оставьте `true`.
 - `EnableCalibrationLog`: технические CSV-журналы для отладки событий.
 - `AudioDeviceContains`: часть имени четырёхканального аудиовыхода контроллера.
 
@@ -162,8 +167,9 @@ PAK не затрагиваются.
 - `calibration.csv`, `nero-input.csv`, `motor.csv`, `padshake.csv` — калибровочные данные, если
   `EnableCalibrationLog` включён.
 
-`DMC5DualSense\launcher.log` фиксирует готовность HID и аудиоканала до запуска игры.
-Если там указано `controller=False` или `advancedHaptics=False`, переподключите USB,
+`DMC5DualSense\launcher.log` фиксирует готовность HID, аудиоканала, прямого
+ввода и виртуального XInput до запуска игры. Если там указано `controller=False`,
+`advancedHaptics=False`, `virtualXInput=False` или `directInput=False`, переподключите USB,
 закройте программы, которые могут удерживать контроллер или его аудиовыход, и снова
 нажмите «Играть» в Steam.
 
@@ -173,6 +179,7 @@ PAK не затрагиваются.
 - [DualSense-Windows](https://github.com/Ohjurot/DualSense-Windows) — справочная реализация USB HID.
 - [HidSharp](https://github.com/IntergatedCircuits/HidSharp) — доступ к HID.
 - [NAudio](https://github.com/naudio/NAudio) — четырёхканальный WASAPI.
+- [ViGEm.NET](https://github.com/ViGEm/ViGEm.NET) и [ViGEmBus](https://github.com/ViGEm/ViGEmBus) — виртуальный XInput-контроллер.
 - [REE Content Editor](https://github.com/kagenocookie/REE-Content-Editor) — чтение и запись GUI RE Engine.
 - [Gamepad Asset Pack](https://github.com/AL2009man/Gamepad-Asset-Pack) и
   [Gamepad Prompt Asset Pack](https://github.com/AL2009man/Gamepad-Prompt-Asset-Pack) —

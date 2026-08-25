@@ -42,6 +42,42 @@ Run("EX-Act can recover a remapped Exceed side", () =>
     Equal("Right", runtime.ExceedMapping);
 });
 
+Run("neutral USB DualSense input maps to neutral XInput", () =>
+{
+    var bytes = NeutralDualSenseReport();
+    Equal(true, DualSenseInputReport.TryParse(bytes, out var input));
+    Equal((ushort)0, input.Buttons);
+    Equal((byte)0, input.LeftTrigger);
+    Equal((byte)0, input.RightTrigger);
+    Equal((short)0, input.LeftThumbX);
+    Equal((short)0, input.LeftThumbY);
+    Equal((short)0, input.RightThumbX);
+    Equal((short)0, input.RightThumbY);
+});
+
+Run("DualSense controls map atomically to the expected Xbox report", () =>
+{
+    var bytes = NeutralDualSenseReport();
+    bytes[1] = 0;
+    bytes[2] = 0;
+    bytes[3] = 255;
+    bytes[4] = 255;
+    bytes[5] = 73;
+    bytes[6] = 201;
+    bytes[8] = 0x21; // Cross + up/right
+    bytes[9] = 0xA3; // L1, R1, Options, R3
+    bytes[10] = 0x03; // PS and touchpad click
+
+    Equal(true, DualSenseInputReport.TryParse(bytes, out var input));
+    Equal((ushort)0x17B9, input.Buttons);
+    Equal((byte)73, input.LeftTrigger);
+    Equal((byte)201, input.RightTrigger);
+    Equal(short.MinValue, input.LeftThumbX);
+    Equal(short.MaxValue, input.LeftThumbY);
+    Equal(short.MaxValue, input.RightThumbX);
+    Equal((short)-32767, input.RightThumbY);
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, failures));
@@ -76,6 +112,18 @@ static BridgeConfig Config() => new()
     EnableAdaptiveTriggers = true,
     TriggerStrength = 1f
 };
+
+static byte[] NeutralDualSenseReport()
+{
+    var bytes = new byte[64];
+    bytes[0] = 0x01;
+    bytes[1] = 128;
+    bytes[2] = 128;
+    bytes[3] = 128;
+    bytes[4] = 128;
+    bytes[8] = 0x08;
+    return bytes;
+}
 
 static GameState State(string character, int danteWeaponId = -1) => new(
     character, true, 100, 100, 0, 0, 0,

@@ -49,6 +49,10 @@ internal sealed class DualSenseDevice : IDisposable
     private HidDevice? _device;
     private DateTime _nextReconnectUtc = DateTime.MinValue;
     private string _lastError = "";
+    private long _writeAttempts;
+    private long _writeSuccesses;
+    private long _triggerEffectWrites;
+    private long _rumbleWrites;
 
     public bool Connected
     {
@@ -118,6 +122,7 @@ internal sealed class DualSenseDevice : IDisposable
     {
         lock (_gate)
         {
+            _writeAttempts++;
             if (!EnsureConnected() || _stream is null || _device is null) return false;
 
             try
@@ -146,6 +151,12 @@ internal sealed class DualSenseDevice : IDisposable
                 report[0x2F] = output.Blue;
 
                 _stream.Write(report);
+                _writeSuccesses++;
+                if (output.LeftTrigger.Mode != TriggerMode.Off ||
+                    output.RightTrigger.Mode != TriggerMode.Off)
+                    _triggerEffectWrites++;
+                if (output.LeftRumble != 0 || output.RightRumble != 0)
+                    _rumbleWrites++;
                 return true;
             }
             catch (Exception ex)
@@ -154,6 +165,23 @@ internal sealed class DualSenseDevice : IDisposable
                 DisconnectNoReset();
                 return false;
             }
+        }
+    }
+
+    public HidWriteDiagnostic GetAndResetWriteDiagnostic()
+    {
+        lock (_gate)
+        {
+            var diagnostic = new HidWriteDiagnostic(
+                _writeAttempts,
+                _writeSuccesses,
+                _triggerEffectWrites,
+                _rumbleWrites);
+            _writeAttempts = 0;
+            _writeSuccesses = 0;
+            _triggerEffectWrites = 0;
+            _rumbleWrites = 0;
+            return diagnostic;
         }
     }
 
@@ -277,4 +305,10 @@ internal sealed class DualSenseDevice : IDisposable
             DisconnectNoReset();
         }
     }
+
+    public readonly record struct HidWriteDiagnostic(
+        long Attempts,
+        long Successes,
+        long TriggerEffectWrites,
+        long RumbleWrites);
 }

@@ -44,7 +44,9 @@ internal static class Program
         Process? bridge = null;
         var ownsBridge = false;
         var activeBridgePid = 0;
-        var requireAdvancedHaptics = LoadSettings(baseDirectory).EnableAdvancedHaptics;
+        var settings = LoadSettings(baseDirectory);
+        var requireAdvancedHaptics = settings.EnableAdvancedHaptics;
+        var requireVirtualXInput = settings.EnableVirtualXInput;
 
         try
         {
@@ -54,7 +56,7 @@ internal static class Program
                 activeBridgePid = ready.Pid;
                 Log($"Reusing live bridge PID {ready.Pid} (resident={ready.Resident}).");
                 ready = WaitForBridgeReady(readyPath, ready.Pid, TimeSpan.FromSeconds(6),
-                    requireAdvancedHaptics);
+                    requireAdvancedHaptics, requireVirtualXInput);
             }
             else
             {
@@ -65,7 +67,7 @@ internal static class Program
                 activeBridgePid = bridge?.Id ?? 0;
                 if (bridge is not null)
                     ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(6),
-                        requireAdvancedHaptics);
+                        requireAdvancedHaptics, requireVirtualXInput);
             }
 
             if (activeBridgePid == 0)
@@ -76,7 +78,9 @@ internal static class Program
                     Log("Bridge readiness timed out; DMC5 will still be launched.");
                 else
                     Log($"Bridge ready: controller={ready.ControllerReady}, " +
-                        $"advancedHaptics={ready.AdvancedHapticsReady}, {ready.Description}");
+                        $"advancedHaptics={ready.AdvancedHapticsReady}, " +
+                        $"virtualXInput={ready.VirtualXInputReady}, " +
+                        $"directInput={ready.DirectInputReady}, {ready.Description}");
             }
 
             var gameStart = new ProcessStartInfo
@@ -135,7 +139,8 @@ internal static class Program
         if (existing?.Resident == true)
         {
             log($"Resident bridge already running as PID {existing.Pid}: " +
-                $"controller={existing.ControllerReady}, advancedHaptics={existing.AdvancedHapticsReady}.");
+                $"controller={existing.ControllerReady}, advancedHaptics={existing.AdvancedHapticsReady}, " +
+                $"virtualXInput={existing.VirtualXInputReady}, directInput={existing.DirectInputReady}.");
             return 0;
         }
 
@@ -153,7 +158,7 @@ internal static class Program
 
         var settings = LoadSettings(baseDirectory);
         var ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(8),
-            settings.EnableAdvancedHaptics);
+            settings.EnableAdvancedHaptics, settings.EnableVirtualXInput);
         if (ready is null)
         {
             log("Resident bridge readiness timed out.");
@@ -161,9 +166,12 @@ internal static class Program
         }
 
         log($"Resident bridge ready as PID {ready.Pid}: controller={ready.ControllerReady}, " +
-            $"advancedHaptics={ready.AdvancedHapticsReady}, {ready.Description}");
+            $"advancedHaptics={ready.AdvancedHapticsReady}, virtualXInput={ready.VirtualXInputReady}, " +
+            $"directInput={ready.DirectInputReady}, {ready.Description}");
         return ready.ControllerReady &&
-               (!settings.EnableAdvancedHaptics || ready.AdvancedHapticsReady)
+               (!settings.EnableAdvancedHaptics || ready.AdvancedHapticsReady) &&
+               (!settings.EnableVirtualXInput ||
+                (ready.VirtualXInputReady && ready.DirectInputReady))
             ? 0
             : 4;
     }
@@ -248,7 +256,8 @@ internal static class Program
         string path,
         int processId,
         TimeSpan timeout,
-        bool requireAdvancedHaptics)
+        bool requireAdvancedHaptics,
+        bool requireVirtualXInput)
     {
         var deadline = DateTime.UtcNow + timeout;
         BridgeReady? latest = null;
@@ -264,7 +273,9 @@ internal static class Program
                     {
                         latest = status;
                         if (status.ControllerReady &&
-                            (!requireAdvancedHaptics || status.AdvancedHapticsReady))
+                            (!requireAdvancedHaptics || status.AdvancedHapticsReady) &&
+                            (!requireVirtualXInput ||
+                             (status.VirtualXInputReady && status.DirectInputReady)))
                             return status;
                     }
                 }
@@ -306,6 +317,8 @@ internal static class Program
         public bool Resident { get; set; }
         public bool ControllerReady { get; set; }
         public bool AdvancedHapticsReady { get; set; }
+        public bool VirtualXInputReady { get; set; }
+        public bool DirectInputReady { get; set; }
         public string Description { get; set; } = "";
         public DateTime Utc { get; set; }
     }
@@ -313,5 +326,6 @@ internal static class Program
     private sealed class LauncherSettings
     {
         public bool EnableAdvancedHaptics { get; set; } = true;
+        public bool EnableVirtualXInput { get; set; } = true;
     }
 }

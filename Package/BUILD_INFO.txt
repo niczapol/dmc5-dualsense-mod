@@ -1,24 +1,24 @@
-DMC5 DualSense Layer 1.3.0-resident-ui
+DMC5 DualSense Layer 1.4.0-isolated-input
 Built: 2026-08-25
 Target: Devil May Cry 5 Steam, local Build ID 11025947
 Target controller: Sony DualSense CFI-ZCT1W, USB VID_054C/PID_0CE6
 Bridge runtime: .NET 10, win-x64
-Steam launch: resident bridge from HKCU Run + hidden launcher wrapper via %command%
+Steam launch: direct DualSense input -> ViGEm XInput + hidden launcher wrapper via %command%
 
 Bridge SHA256:
-E6A395F6BD1DDF3EB75441F5656FDFAA76036361600CADEF38CCEB78D633BDEE
+85C19D82B389014177D4ECAB4CB0B974BEADB9A2FAD69E6EA86DE7AB54430DAE
 Plugin SHA256:
-70247F77133057E44875C791586E49F1075DDB808E28902D2325F852BAF33D16
+49D702FB0179CF02B2F349BDC0406E1D011B944B52A1A9DCA681B9BD86D6C4CF
 Launcher SHA256:
-4C3FD0FE7DFAE112C7C8C1A69945D9845A786B3B3BEB375C3A571C2FF8DA6229
+5F3C47D3C6120FA6D402C7FF894A27D23DA42CFEB25158B2AF76F0E19FBE47EF
 Legacy startup CMD SHA256:
 7D613EA210A61761033EF721BD7328F09B351773DD3EC4C16FBF664B3D76F9BE
 Installer SHA256:
-9510A92EEC18595765148A1F7510049D01D091F30CDE4EA9783501714355FF7B
+0096E02195F99C493FDE15628C2B7D77169BFEF0946B6A9B05AE8356C31DC10E
 Uninstaller SHA256:
 81A4B6A7D4F5C1C0E00FFDD37F85906D88F59E293169C35F53495DC2D7A1E0A0
 Default config SHA256:
-339EBD8672D8CD9495623D77E50E0CF9C1190F03203057DC6C91F804BDEF7A4E
+6BB6E55D782B381A0DEA0DA93D90C8FD72A2F0D2CA1563476C3FF4F3E7385089
 
 UI resources SHA256:
 97915422310A77A5BFE52D9BB668B478DEFB8577D911236DE4B4D04970196861  ui0010_iam.tex.11.x64
@@ -48,7 +48,9 @@ PC/UI integration:
 - aspect-correct DualSense art with calibrated face buttons, D-pad, sticks, shoulders, touchpad and Options;
 - only target 4x4 BC7 regions are recompressed; all ordinary PlayStation prompt blocks remain byte-identical;
 - exact reversible invalidation of two GUI PAK hash pairs; resource payload is untouched;
-- resident bridge opens raw DualSense HID before Steam Input can hide it;
-- launcher reuses a live resident PID and verifies fresh HID/audio readiness before starting Steam app 601150;
+- resident bridge owns direct DualSense input/output while Steam Input is disabled for app 601150;
+- physical input is atomically mirrored to a ViGEm Xbox 360 target for DMC5 XInput compatibility;
+- launcher reuses a live resident PID and verifies fresh HID/audio/direct-input/virtual-XInput readiness before starting Steam app 601150;
+- five-second diagnostics prove HID writes, trigger/rumble activity, audio frames and physical-to-virtual input throughput;
 - temporary fallback bridge remains parent-scoped and shuts down after the game;
 - player polling checks RE Engine metadata before reading fields, eliminating menu-time missing-member log spam.

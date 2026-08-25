@@ -47,6 +47,8 @@ internal static class Program
 
         using var controller = new DualSenseDevice();
         using var haptics = new HapticEngine(config.HapticsStrength);
+        using var virtualInput = new VirtualXboxInput(haptics.SetVirtualRumble);
+        using var inputPump = new DualSenseInputPump(virtualInput, Log);
 
         var foundController = controller.EnsureConnected();
         Log(foundController
@@ -65,6 +67,22 @@ internal static class Program
             Log(audioStarted
                 ? $"Advanced haptics audio: {haptics.Status}"
                 : $"Advanced haptics unavailable: {haptics.Status}");
+        }
+
+        var isSelfTest = args.Any(arg =>
+            arg.Equals("--self-test", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--self-test-all", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--probe", StringComparison.OrdinalIgnoreCase));
+        var virtualInputStarted = false;
+        var inputTask = Task.CompletedTask;
+        if (config.EnableVirtualXInput && !isSelfTest)
+        {
+            virtualInputStarted = virtualInput.Start();
+            Log(virtualInputStarted
+                ? $"Direct-input isolation ready: {virtualInput.Status}."
+                : $"Virtual XInput unavailable: {virtualInput.Status}");
+            if (virtualInputStarted)
+                inputTask = inputPump.RunAsync(Shutdown.Token);
         }
 
         if (args.Any(arg => arg.Equals("--probe", StringComparison.OrdinalIgnoreCase)))
@@ -100,16 +118,29 @@ internal static class Program
             return 0;
         }
 
+        if (args.Any(arg => arg.Equals("--virtual-probe", StringComparison.OrdinalIgnoreCase)))
+        {
+            await Task.Delay(2500);
+            Log($"Virtual-input probe: virtual={virtualInput.Started}, input={inputPump.Connected}, " +
+                $"physicalReports={inputPump.ValidReports}, submitted={virtualInput.SubmittedReports}.");
+            return virtualInput.Started && inputPump.Connected &&
+                   inputPump.ValidReports > 0 && virtualInput.SubmittedReports > 0
+                ? 0
+                : 2;
+        }
+
         using var udp = new UdpClient(new IPEndPoint(IPAddress.Loopback, config.Port));
         Log($"Listening for DMC5 telemetry on 127.0.0.1:{config.Port}.");
-        WriteReadyStatus(readyPath, resident, foundController, audioStarted, controller.Description);
+        WriteReadyStatus(readyPath, resident, foundController, audioStarted,
+            virtualInputStarted, inputPump.Connected, controller.Description);
 
         var receiver = ReceiveLoop(udp, haptics, config, Log, !resident, Shutdown.Token);
-        var output = OutputLoop(controller, haptics, config, resident, readyPath, Log, Shutdown.Token);
+        var output = OutputLoop(controller, haptics, virtualInput, inputPump,
+            config, resident, readyPath, Log, Shutdown.Token);
 
         try
         {
-            await Task.WhenAll(receiver, output);
+            await Task.WhenAll(receiver, output, inputTask);
         }
         catch (OperationCanceledException)
         {
@@ -129,6 +160,8 @@ internal static class Program
         bool resident,
         bool controllerReady,
         bool advancedHapticsReady,
+        bool virtualXInputReady,
+        bool directInputReady,
         string description)
     {
         try
@@ -139,6 +172,8 @@ internal static class Program
                 resident,
                 controllerReady,
                 advancedHapticsReady,
+                virtualXInputReady,
+                directInputReady,
                 description,
                 utc = DateTime.UtcNow
             });
@@ -252,14 +287,18 @@ internal static class Program
         {
             var now = DateTime.UtcNow;
             if (now - windowStartedUtc < TimeSpan.FromSeconds(5)) return;
-            if (motorPackets > 0 || padShakePackets > 0 || events.Count > 0 || originalHaptics.Count > 0)
+            var audio = haptics.GetAndResetRenderDiagnostic();
+            if (motorPackets > 0 || padShakePackets > 0 || events.Count > 0 ||
+                originalHaptics.Count > 0 || audio.NonZeroFrames > 0)
             {
                 var eventSummary = string.Join(",", events.OrderBy(pair => pair.Key)
                     .Select(pair => $"{pair.Key}:{pair.Value}"));
                 var hapticSummary = string.Join(",", originalHaptics.OrderBy(pair => pair.Key)
                     .Select(pair => $"{pair.Key}:{pair.Value}"));
                 log($"Telemetry 5s: motor={motorPackets}, padshake={padShakePackets}, " +
-                    $"events=[{eventSummary}], original=[{hapticSummary}].");
+                    $"events=[{eventSummary}], original=[{hapticSummary}], " +
+                    $"audio={audio.NonZeroFrames}/{audio.Frames} frames, peak={audio.Peak:0.000}, " +
+                    $"state={audio.PlaybackState}.");
             }
 
             motorPackets = 0;
@@ -418,6 +457,8 @@ internal static class Program
     private static async Task OutputLoop(
         DualSenseDevice controller,
         HapticEngine haptics,
+        VirtualXboxInput virtualInput,
+        DualSenseInputPump inputPump,
         BridgeConfig config,
         bool resident,
         string readyPath,
@@ -429,6 +470,9 @@ internal static class Program
         var wasAudioReady = haptics.Started;
         var nextAudioRetryUtc = DateTime.MinValue;
         var nextStatusWriteUtc = DateTime.MinValue;
+        var nextOutputDiagnosticUtc = DateTime.UtcNow.AddSeconds(5);
+        var previousInputReports = inputPump.ValidReports;
+        var previousSubmittedReports = virtualInput.SubmittedReports;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -485,7 +529,24 @@ internal static class Program
             if (statusChanged || DateTime.UtcNow >= nextStatusWriteUtc)
             {
                 nextStatusWriteUtc = DateTime.UtcNow.AddSeconds(2);
-                WriteReadyStatus(readyPath, resident, connected, audioReady, controller.Description);
+                WriteReadyStatus(readyPath, resident, connected, audioReady,
+                    !config.EnableVirtualXInput || virtualInput.Started,
+                    !config.EnableVirtualXInput || inputPump.Connected,
+                    controller.Description);
+            }
+
+            if (DateTime.UtcNow >= nextOutputDiagnosticUtc)
+            {
+                nextOutputDiagnosticUtc = DateTime.UtcNow.AddSeconds(5);
+                var hid = controller.GetAndResetWriteDiagnostic();
+                var currentInputReports = inputPump.ValidReports;
+                var currentSubmittedReports = virtualInput.SubmittedReports;
+                log($"Output 5s: HID={hid.Successes}/{hid.Attempts}, " +
+                    $"triggerWrites={hid.TriggerEffectWrites}, rumbleWrites={hid.RumbleWrites}, " +
+                    $"physicalInput={currentInputReports - previousInputReports}, " +
+                    $"virtualXInput={currentSubmittedReports - previousSubmittedReports}.");
+                previousInputReports = currentInputReports;
+                previousSubmittedReports = currentSubmittedReports;
             }
 
             await Task.Delay(33, cancellationToken);

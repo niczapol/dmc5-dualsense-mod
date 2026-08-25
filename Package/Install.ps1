@@ -185,6 +185,22 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
     throw 'Сначала закройте Devil May Cry 5.'
 }
 
+$vigemBus = Get-Service -Name 'ViGEmBus' -ErrorAction SilentlyContinue
+if (-not $vigemBus) {
+    throw 'Не найден ViGEmBus. Для изолированного ввода DualSense нужен Nefarius Virtual Gamepad Emulation Bus.'
+}
+if ($vigemBus.Status -ne 'Running') {
+    try {
+        Start-Service -Name 'ViGEmBus'
+        $vigemBus = Get-Service -Name 'ViGEmBus'
+    } catch {
+        throw "ViGEmBus установлен, но не запускается: $($_.Exception.Message)"
+    }
+}
+if ($vigemBus.Status -ne 'Running') {
+    throw 'ViGEmBus не перешёл в состояние Running.'
+}
+
 $modDir = Join-Path $resolvedGameDir 'DMC5DualSense'
 $manifestPath = Join-Path $modDir 'install-manifest.json'
 if (Test-Path -LiteralPath $manifestPath) {
@@ -344,7 +360,7 @@ try {
     $autostartInstalled = $true
 
     $manifest = [pscustomobject]@{
-        Version = '1.3.0-resident-ui'
+        Version = '1.4.0-isolated-input'
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
         Files = $records
@@ -365,7 +381,9 @@ try {
     Write-Host ''
     Write-Host 'DMC5 DualSense Layer установлен.' -ForegroundColor Green
     Write-Host "Игра: $resolvedGameDir"
-    Write-Host 'Фоновый bridge зарегистрирован в автозапуске и захватывает DualSense до Steam Input.'
+    Write-Host 'Фоновый bridge зарегистрирован в автозапуске.'
+    Write-Host 'Он читает DualSense напрямую, а управление передаёт в DMC5 через ViGEm XInput.'
+    Write-Host 'Для DMC5 обязательно отключите Steam Input: Свойства -> Контроллер -> Отключить.' -ForegroundColor Yellow
     Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
     Write-Host 'Один раз укажите в Steam -> Свойства -> Параметры запуска:'
     Write-Host ('"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%') -ForegroundColor Cyan

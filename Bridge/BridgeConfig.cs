@@ -12,6 +12,7 @@ internal sealed class BridgeConfig
     public bool EnableAdaptiveTriggers { get; set; } = true;
     public bool EnableAdvancedHaptics { get; set; } = true;
     public bool EnableLightbar { get; set; } = true;
+    public bool EnableVirtualXInput { get; set; } = true;
     public bool EnableCalibrationLog { get; set; } = true;
     public string AudioDeviceContains { get; set; } = "DualSense Wireless Controller";
 

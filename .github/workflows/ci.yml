@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.400
+          cache: true
+          cache-dependency-path: |
+            Bridge/DMC5DualSense.Bridge.csproj
+            Launcher/DMC5DualSense.Launcher.csproj
+            Tests/DMC5DualSense.LogicTests.csproj
+            Tools/UiAssetBuilder/DMC5DualSense.UiAssetBuilder.csproj
+
+      - name: Build bridge
+        run: dotnet build Bridge/DMC5DualSense.Bridge.csproj -c Release
+
+      - name: Build Steam launcher
+        run: dotnet build Launcher/DMC5DualSense.Launcher.csproj -c Release
+
+      - name: Build deterministic UI tool
+        run: dotnet build Tools/UiAssetBuilder/DMC5DualSense.UiAssetBuilder.csproj -c Release
+
+      - name: Run logic tests
+        run: dotnet run --project Tests/DMC5DualSense.LogicTests.csproj -c Release
+
+      - name: Parse installer scripts
+        shell: pwsh
+        run: |
+          $errors = $null
+          foreach ($path in @('Package/Install.ps1', 'Package/Uninstall.ps1', 'Tools/Build-Release.ps1')) {
+            [void][Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path), [ref]$null, [ref]$errors)
+            if ($errors) {
+              $errors | Format-List
+              throw "PowerShell parse failure: $path"
+            }
+          }

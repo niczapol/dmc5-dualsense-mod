@@ -11,6 +11,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <DebugType>embedded</DebugType>
+    <HapticsRoot Condition="'$(HapticsRoot)' == ''">$(MSBuildProjectDirectory)\Assets\Haptics</HapticsRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,7 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Assets\Haptics\*.wav" />
+    <EmbeddedResource Include="$(HapticsRoot)\*.wav">
+      <LogicalName>DMC5DualSense.Bridge.Assets.Haptics.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

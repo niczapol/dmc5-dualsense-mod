@@ -4,6 +4,16 @@
 )
 
 $ErrorActionPreference = 'Stop'
+$packageVersion = '1.5.0-session-audio'
+$releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
+if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
+    try {
+        $releaseMetadata = Get-Content -LiteralPath $releaseManifestSource -Raw | ConvertFrom-Json
+        if ($releaseMetadata.Version) { $packageVersion = [string]$releaseMetadata.Version }
+    } catch {
+        throw "Повреждён release-manifest.json: $($_.Exception.Message)"
+    }
+}
 
 function Find-Dmc5Directory {
     if ($GameDir) {
@@ -185,9 +195,24 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
     throw 'Сначала закройте Devil May Cry 5.'
 }
 
+$dependencies = Join-Path $PSScriptRoot 'Dependencies'
 $vigemBus = Get-Service -Name 'ViGEmBus' -ErrorAction SilentlyContinue
 if (-not $vigemBus) {
-    throw 'Не найден ViGEmBus. Для изолированного ввода DualSense нужен Nefarius Virtual Gamepad Emulation Bus.'
+    $vigemInstaller = Join-Path $dependencies 'ViGEmBus_1.22.0_x64_x86_arm64.exe'
+    if (-not (Test-Path -LiteralPath $vigemInstaller -PathType Leaf)) {
+        throw 'Не найден ViGEmBus. Установите официальный Nefarius ViGEmBus 1.22.0 или используйте полный release-архив мода.'
+    }
+
+    Write-Host 'Для виртуального XInput требуется ViGEmBus. Сейчас появится стандартный запрос UAC.' -ForegroundColor Yellow
+    $driverInstall = Start-Process -FilePath $vigemInstaller -Verb RunAs -Wait -PassThru -ArgumentList @('/qn', '/norestart')
+    if ($driverInstall.ExitCode -notin @(0, 1641, 3010)) {
+        throw "Установщик ViGEmBus завершился с кодом $($driverInstall.ExitCode)."
+    }
+    Start-Sleep -Seconds 1
+    $vigemBus = Get-Service -Name 'ViGEmBus' -ErrorAction SilentlyContinue
+    if (-not $vigemBus) {
+        throw 'ViGEmBus установлен, но служба пока не появилась. Перезагрузите Windows и повторите установку мода.'
+    }
 }
 if ($vigemBus.Status -ne 'Running') {
     try {
@@ -210,7 +235,6 @@ if ((Test-Path -LiteralPath $modDir -PathType Container) -and (Get-ChildItem -Li
     throw 'Папка DMC5DualSense уже существует, но в ней нет журнала этого установщика. Переименуйте её или укажите другую установку игры.'
 }
 
-$dependencies = Join-Path $PSScriptRoot 'Dependencies'
 $frameworkZip = Join-Path $dependencies 'REFramework.zip'
 $csharpZip = Join-Path $dependencies 'csharp-api.zip'
 $uiRoot = Join-Path $PSScriptRoot 'UI'
@@ -225,6 +249,8 @@ foreach ($required in @(
     (Join-Path $PSScriptRoot 'Uninstall.ps1'),
     (Join-Path $PSScriptRoot 'UNINSTALL-DMC5-DualSense.cmd'),
     (Join-Path $PSScriptRoot 'README_RU.md'),
+    (Join-Path $PSScriptRoot 'README_EN.md'),
+    (Join-Path $PSScriptRoot 'NOTICE.txt'),
     (Join-Path $PSScriptRoot 'BUILD_INFO.txt'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui0000\tex\ui0010_iam.tex.11.x64'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui4000\gui\ui4002.gui.270020'),
@@ -307,7 +333,12 @@ try {
     Install-OneFile (Join-Path $PSScriptRoot 'Uninstall.ps1') (Join-Path $modDir 'Uninstall.ps1')
     Install-OneFile (Join-Path $PSScriptRoot 'UNINSTALL-DMC5-DualSense.cmd') (Join-Path $modDir 'UNINSTALL-DMC5-DualSense.cmd')
     Install-OneFile (Join-Path $PSScriptRoot 'README_RU.md') (Join-Path $modDir 'README_RU.md')
+    Install-OneFile (Join-Path $PSScriptRoot 'README_EN.md') (Join-Path $modDir 'README_EN.md')
+    Install-OneFile (Join-Path $PSScriptRoot 'NOTICE.txt') (Join-Path $modDir 'NOTICE.txt')
     Install-OneFile (Join-Path $PSScriptRoot 'BUILD_INFO.txt') (Join-Path $modDir 'BUILD_INFO.txt')
+    if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
+        Install-OneFile $releaseManifestSource (Join-Path $modDir 'release-manifest.json')
+    }
 
     $configTarget = Join-Path $modDir 'config.json'
     if (-not (Test-Path -LiteralPath $configTarget -PathType Leaf)) {
@@ -344,7 +375,7 @@ try {
     }
 
     $manifest = [pscustomobject]@{
-        Version = '1.5.0-session-audio'
+        Version = $packageVersion
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
         Files = $records
@@ -360,8 +391,17 @@ try {
     Write-Host 'Он читает DualSense напрямую, а управление передаёт в DMC5 через ViGEm XInput.'
     Write-Host 'Для DMC5 обязательно отключите Steam Input: Свойства -> Контроллер -> Отключить.' -ForegroundColor Yellow
     Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
+    $steamLaunchCommand = '"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%'
+    $copiedToClipboard = $false
+    try {
+        Set-Clipboard -Value $steamLaunchCommand
+        $copiedToClipboard = $true
+    } catch { }
     Write-Host 'Один раз укажите в Steam -> Свойства -> Параметры запуска:'
-    Write-Host ('"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%') -ForegroundColor Cyan
+    Write-Host $steamLaunchCommand -ForegroundColor Cyan
+    if ($copiedToClipboard) {
+        Write-Host 'Строка уже скопирована в буфер обмена — просто вставьте её через Ctrl+V.' -ForegroundColor Green
+    }
 }
 catch {
     Restore-PakInvalidations $resolvedGameDir @($pakInvalidations)

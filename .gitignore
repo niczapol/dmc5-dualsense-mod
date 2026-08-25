@@ -8,6 +8,7 @@
 
 # Local experiments and historical publish folders
 publish*/
+artifacts/
 
 # Runtime telemetry and local installation state
 *.log

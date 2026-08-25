@@ -1,0 +1,3 @@
+Package/*.ps1 text eol=lf
+Package/*.txt text eol=lf
+Package/*.md text eol=lf

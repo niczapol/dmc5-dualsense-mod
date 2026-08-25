@@ -42,13 +42,17 @@ internal static class Program
             ["c_DirD"] = new(new(53.0f, 109.0f), 7),
             ["c_DirL"] = new(new(35.0f, 95.0f), 8),
             ["c_DirR"] = new(new(72.0f, 95.0f), 9),
-            ["c_LT"] = new(new(54.5f, 23.0f), 11, new(52, 26)),
-            ["c_LB"] = new(new(54.5f, 34.0f), 12, new(52, 26)),
-            ["c_RT"] = new(new(231.5f, 23.0f), 11, new(-52, 26)),
-            ["c_RB"] = new(new(231.5f, 34.0f), 12, new(-52, 26)),
+            // Match the native 1467x816 DualSense artwork after it is scaled
+            // into the 280x156 controller panel. L2/R2 are taller and narrower
+            // than L1/R1; using the old common 52x26 rectangle made the two
+            // shoulder highlights cover each other.
+            ["c_LT"] = new(new(54.0f, 26.5f), 11, new(38.5f, 29.0f)),
+            ["c_LB"] = new(new(53.0f, 39.0f), 12, new(42.5f, 25.0f)),
+            ["c_RT"] = new(new(232.0f, 26.5f), 11, new(-38.5f, 29.0f)),
+            ["c_RB"] = new(new(233.0f, 39.0f), 12, new(-42.5f, 25.0f)),
             ["c_LS"] = new(new(97.5f, 129.5f), 13),
             ["c_RS"] = new(new(189.0f, 129.5f), 13),
-            ["c_CenL"] = new(new(143.0f, 71.0f), 37, new(120, 56)),
+            ["c_CenL"] = new(new(143.0f, 72.0f), 37, new(118.5f, 61.5f)),
             ["c_CenR"] = new(new(212.0f, 66.0f), 10)
         };
 

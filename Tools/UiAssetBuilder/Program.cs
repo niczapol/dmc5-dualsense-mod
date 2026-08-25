@@ -23,6 +23,7 @@ internal static class Program
             return args[0].ToLowerInvariant() switch
             {
                 "build" => Build(args),
+                "patch-markers" => PatchMarkers(args),
                 "patch-bc7" => PatchBc7(args),
                 "tex-to-dds" => TexToDds(args),
                 _ => throw new ArgumentException($"Unknown command: {args[0]}")
@@ -110,6 +111,39 @@ internal static class Program
         File.WriteAllBytes(outputPath, baseBytes);
         Console.WriteLine($"Patched {args.Length - 4} BC7 region(s): {outputPath}");
         return 0;
+    }
+
+    private static int PatchMarkers(string[] args)
+    {
+        if (args.Length != 4)
+            throw new ArgumentException(
+                "patch-markers requires: <ui8013-atlas.png> <dualsense-assets-directory> <output.png>");
+
+        using var atlas = LoadArgb(args[1]);
+        if (atlas.Width != 512 || atlas.Height != 512)
+            throw new InvalidDataException(
+                $"ui8013 marker atlas must be 512x512, got {atlas.Width}x{atlas.Height}.");
+
+        var assets = Path.GetFullPath(args[2]);
+        ReplaceMarker(atlas, new Rectangle(288, 104, 52, 26),
+            Path.Combine(assets, "DualSense_L2-Active.png"));
+        ReplaceMarker(atlas, new Rectangle(340, 104, 52, 26),
+            Path.Combine(assets, "DualSense_L1-Active.png"));
+        ReplaceMarker(atlas, new Rectangle(392, 104, 104, 78),
+            Path.Combine(assets, "DualSense_Touchpad-Click.png"));
+
+        var output = Path.GetFullPath(args[3]);
+        SavePng(atlas, output);
+        return 0;
+    }
+
+    private static void ReplaceMarker(Bitmap atlas, Rectangle uvCell, string assetPath)
+    {
+        using var asset = LoadArgb(assetPath);
+        using var scaled = Scale(asset, uvCell.Size);
+        Clear(atlas, uvCell);
+        using var graphics = CreateGraphics(atlas);
+        DrawPixelExact(graphics, scaled, uvCell.Location);
     }
 
     private static int TexToDds(string[] args)
@@ -407,6 +441,7 @@ internal static class Program
         Console.Error.WriteLine(
             "Usage:\n" +
             "  build <controller.png> <ui0010-base.png> <ui4002-base.png> <ui8013-base.png> <output-dir>\n" +
+            "  patch-markers <ui8013-atlas.png> <dualsense-assets-directory> <output.png>\n" +
             "  patch-bc7 <base.tex> <encoded.dds> <output.tex> <left,top,right,bottom> [...]\n" +
             "  tex-to-dds <template.dds> <input.tex> <output.dds>");
     }

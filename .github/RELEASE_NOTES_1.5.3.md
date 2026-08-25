@@ -11,6 +11,8 @@ REFramework log spam observed during long sessions.
   per-frame `Member not found` messages for `manualPlayer`, `hp`, and `maxHp`.
 - Logs adaptive mappings only when a mapping actually changes.
 - Adds regression coverage for incidental, alternating, isolated, and locked mappings.
+- Upgrades an existing installation automatically while preserving configuration and
+  diagnostic logs; unexpected unowned files still stop the installer safely.
 
 Install over an existing release with `Install-DMC5DualSense.cmd`; personal settings
 and backups are preserved.

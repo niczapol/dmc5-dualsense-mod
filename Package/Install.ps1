@@ -229,10 +229,39 @@ if ($vigemBus.Status -ne 'Running') {
 $modDir = Join-Path $resolvedGameDir 'DMC5DualSense'
 $manifestPath = Join-Path $modDir 'install-manifest.json'
 if (Test-Path -LiteralPath $manifestPath) {
-    throw 'DMC5 DualSense Layer уже установлен. Для чистого обновления сначала запустите Uninstall.ps1.'
+    $installedUninstaller = Join-Path $modDir 'Uninstall.ps1'
+    if (-not (Test-Path -LiteralPath $installedUninstaller -PathType Leaf)) {
+        throw 'Найдена существующая установка без Uninstall.ps1. Восстановите её или удалите вручную перед обновлением.'
+    }
+
+    Write-Host 'Найдена предыдущая версия. Выполняется безопасное обновление с сохранением настроек и журналов...' -ForegroundColor Cyan
+    & $installedUninstaller -GameDir $resolvedGameDir
+    if (Test-Path -LiteralPath $manifestPath) {
+        throw 'Предыдущая версия не была полностью удалена; обновление остановлено.'
+    }
 }
-if ((Test-Path -LiteralPath $modDir -PathType Container) -and (Get-ChildItem -LiteralPath $modDir -Force)) {
-    throw 'Папка DMC5DualSense уже существует, но в ней нет журнала этого установщика. Переименуйте её или укажите другую установку игры.'
+if (Test-Path -LiteralPath $modDir -PathType Container) {
+    # The uninstaller deliberately retains user configuration and runtime
+    # diagnostics when they differ from installed files. Accept only those known
+    # files here; anything else may belong to another tool and must not be claimed.
+    $retainedNames = @(
+        'config.json',
+        'bridge.log',
+        'bridge.ready.json',
+        'launcher.log',
+        'plugin.log',
+        'calibration.csv',
+        'nero-input.csv',
+        'motor.csv',
+        'player-type-dump.txt'
+    )
+    $unexpected = @(Get-ChildItem -LiteralPath $modDir -Force | Where-Object {
+        $_.PSIsContainer -or $_.Name -notin $retainedNames
+    })
+    if ($unexpected.Count -gt 0) {
+        $unexpectedNames = ($unexpected | ForEach-Object Name) -join ', '
+        throw "Папка DMC5DualSense содержит неизвестные файлы без журнала установки: $unexpectedNames. Переименуйте папку или уберите эти файлы вручную."
+    }
 }
 
 $frameworkZip = Join-Path $dependencies 'REFramework.zip'

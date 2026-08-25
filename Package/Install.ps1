@@ -4,7 +4,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.5.0-session-audio'
+$packageVersion = '1.5.1-v-headless'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {
@@ -319,6 +319,36 @@ try {
     }
 
     Install-OneFile $incomingDinput.FullName $targetDinput
+
+    # REFramework defaults to an open overlay. MenuOpen is applied only when
+    # RememberMenuState is enabled, so setting MenuOpen=false by itself does not
+    # suppress the panel. Preserve the user's complete file through the normal
+    # installer backup, and change only the three headless-startup keys.
+    $refConfigTarget = Join-Path $resolvedGameDir 're2_fw_config.txt'
+    $refConfigSource = Join-Path $temporary 're2_fw_config.txt'
+    $refConfigLines = if (Test-Path -LiteralPath $refConfigTarget -PathType Leaf) {
+        [Collections.Generic.List[string]]::new([string[]](Get-Content -LiteralPath $refConfigTarget))
+    } else {
+        [Collections.Generic.List[string]]::new()
+    }
+    foreach ($setting in ([ordered]@{
+        REFrameworkConfig_MenuOpen = 'false'
+        REFrameworkConfig_RememberMenuState = 'true'
+        ScriptRunner_OpenDebugConsoleAtStartup = 'false'
+    }).GetEnumerator()) {
+        $replacement = $setting.Key + '=' + $setting.Value
+        $replaced = $false
+        for ($lineIndex = 0; $lineIndex -lt $refConfigLines.Count; $lineIndex++) {
+            if ($refConfigLines[$lineIndex] -match ('^' + [regex]::Escape($setting.Key) + '=')) {
+                $refConfigLines[$lineIndex] = $replacement
+                $replaced = $true
+                break
+            }
+        }
+        if (-not $replaced) { $refConfigLines.Add($replacement) }
+    }
+    [IO.File]::WriteAllLines($refConfigSource, $refConfigLines, [Text.UTF8Encoding]::new($false))
+    Install-OneFile $refConfigSource $refConfigTarget
 
     $csharpRoot = Join-Path $csharpExtract 'reframework'
     foreach ($source in Get-ChildItem -LiteralPath $csharpRoot -File -Recurse) {

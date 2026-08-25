@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.5.1
+# DMC5 DualSense Layer 1.5.2
 
 Unofficial native DualSense support for the Windows Steam version of Devil May
 Cry 5. The mod adds adaptive triggers, advanced haptics, character lightbar
@@ -33,6 +33,8 @@ The bridge starts before DMC5 and exits with it. It creates no Windows startup
 entry, opens no console window, and leaves no virtual Xbox controller running
 outside the game. The REFramework panel starts hidden and remains available with
 the `Insert` key for diagnostics.
+The launcher also hides the parent `cmd.exe` window Steam uses to expand the
+`%command%` wrapper while retaining session cleanup after DMC5 exits.
 
 ## What the launcher verifies
 

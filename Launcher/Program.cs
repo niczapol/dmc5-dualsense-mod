@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -29,6 +30,8 @@ internal static class Program
                 // A logging failure must never prevent the game from starting.
             }
         }
+
+        HideParentCommandWindow(Log);
 
         if (args.Any(arg => arg.Equals("--background", StringComparison.OrdinalIgnoreCase)))
             return EnsureResidentBridge(baseDirectory, readyPath, Log);
@@ -129,6 +132,97 @@ internal static class Program
             }
         }
     }
+
+    private static void HideParentCommandWindow(Action<string> log)
+    {
+        try
+        {
+            var information = new ProcessBasicInformation();
+            var status = NtQueryInformationProcess(
+                Process.GetCurrentProcess().Handle,
+                processInformationClass: 0,
+                ref information,
+                Marshal.SizeOf<ProcessBasicInformation>(),
+                out _);
+            if (status != 0 || information.InheritedFromUniqueProcessId == IntPtr.Zero)
+                return;
+
+            var parentId = information.InheritedFromUniqueProcessId.ToInt32();
+            using var parent = Process.GetProcessById(parentId);
+            log($"Launcher parent is {parent.ProcessName}.exe PID {parentId}.");
+            if (!parent.ProcessName.Equals("cmd", StringComparison.OrdinalIgnoreCase) &&
+                !parent.ProcessName.Equals("powershell", StringComparison.OrdinalIgnoreCase) &&
+                !parent.ProcessName.Equals("pwsh", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // Steam expands a launch option containing %command% through cmd.exe.
+            // That console remains visible while this launcher deliberately waits
+            // for DMC5 so it can tear the session bridge down cleanly. Attach only
+            // long enough to obtain the console HWND, hide it, then detach again.
+            var attachedHere = AttachConsole((uint)parentId);
+            try
+            {
+                var window = GetConsoleWindow();
+                if (window == IntPtr.Zero)
+                {
+                    parent.Refresh();
+                    window = parent.MainWindowHandle;
+                }
+
+                if (window == IntPtr.Zero)
+                {
+                    log($"Parent {parent.ProcessName}.exe PID {parentId} has no visible console window.");
+                    return;
+                }
+
+                var hideRequested = ShowWindowAsync(window, ShowWindowHide);
+                log($"Parent command window hide requested for {parent.ProcessName}.exe PID {parentId}: " +
+                    $"hwnd=0x{window.ToInt64():X}, accepted={hideRequested}.");
+            }
+            finally
+            {
+                if (attachedHere) FreeConsole();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Window cleanup is cosmetic and must never block game startup.
+            log("Could not hide the parent command window: " + ex.Message);
+        }
+    }
+
+    private const int ShowWindowHide = 0;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public IntPtr Reserved1;
+        public IntPtr PebBaseAddress;
+        public IntPtr Reserved2_0;
+        public IntPtr Reserved2_1;
+        public IntPtr UniqueProcessId;
+        public IntPtr InheritedFromUniqueProcessId;
+    }
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(
+        IntPtr processHandle,
+        int processInformationClass,
+        ref ProcessBasicInformation processInformation,
+        int processInformationLength,
+        out int returnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AttachConsole(uint processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool FreeConsole();
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr window, int command);
 
     private static int EnsureResidentBridge(
         string baseDirectory,

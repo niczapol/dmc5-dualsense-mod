@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.5
+# DMC5 DualSense Layer 1.5.1
 
 Unofficial native DualSense support for the Windows Steam version of Devil May
 Cry 5. The mod adds adaptive triggers, advanced haptics, character lightbar
@@ -30,7 +30,9 @@ so the complete feature set requires USB.
 7. Connect the controller by USB and use the normal Steam Play button.
 
 The bridge starts before DMC5 and exits with it. It creates no Windows startup
-entry and leaves no virtual Xbox controller running outside the game.
+entry, opens no console window, and leaves no virtual Xbox controller running
+outside the game. The REFramework panel starts hidden and remains available with
+the `Insert` key for diagnostics.
 
 ## What the launcher verifies
 
@@ -53,6 +55,10 @@ resistance. Blue Rose therefore gets adaptive resistance only when its action
 is mapped to L2 or R2. The PS5 soundbank has no separate named sample for every
 ordinary sword hit, Blue Rose hold, EX-Act, or MAX-Act; ordinary PC rumble still
 feeds the DualSense actuators for actions where the game emits it.
+
+The extracted PS5 logic has no V-specific adaptive-trigger branch or named V
+haptic sample. V uses the purple character light and DMC5's ordinary motor
+commands. Version 1.5.1 fixes `app.PlayerV` detection in the Void.
 
 ## Configuration and diagnostics
 

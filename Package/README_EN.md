@@ -29,6 +29,9 @@ so the complete feature set requires USB.
    `Properties -> General -> Launch Options`.
 7. Connect the controller by USB and use the normal Steam Play button.
 
+Running the installer over an earlier release performs a safe automatic upgrade;
+`config.json` and diagnostic logs are preserved.
+
 The bridge starts before DMC5 and exits with it. It creates no Windows startup
 entry, opens no console window, and leaves no virtual Xbox controller running
 outside the game. The REFramework panel starts hidden and remains available with

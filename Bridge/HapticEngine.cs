@@ -18,6 +18,8 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
     private string _status = "disabled";
     private float _continuousLow;
     private float _continuousHigh;
+    private float _virtualLow;
+    private float _virtualHigh;
     private double _continuousLowPhase;
     private double _continuousHighPhase;
     private DateTime _continuousUntilUtc;
@@ -26,6 +28,9 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
     private float _transientRumbleHigh;
     private DateTime _transientRumbleStartUtc;
     private DateTime _transientRumbleUntilUtc;
+    private long _renderedFrames;
+    private long _nonZeroRenderedFrames;
+    private float _renderPeak;
 
     public HapticEngine(float strength)
     {
@@ -219,6 +224,9 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
                 high = Math.Max(high, _continuousHigh * _strength);
             }
 
+            low = Math.Max(low, _virtualLow * _strength);
+            high = Math.Max(high, _virtualHigh * _strength);
+
             return (
                 (byte)Math.Clamp((int)Math.Round(low * 255f), 0, 255),
                 (byte)Math.Clamp((int)Math.Round(high * 255f), 0, 255));
@@ -283,6 +291,15 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         }
     }
 
+    public void SetVirtualRumble(byte largeMotor, byte smallMotor)
+    {
+        lock (_gate)
+        {
+            _virtualLow = largeMotor / 255f;
+            _virtualHigh = smallMotor / 255f;
+        }
+    }
+
     public int Read(byte[] buffer, int offset, int count)
     {
         Array.Clear(buffer, offset, count);
@@ -291,8 +308,10 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
         lock (_gate)
         {
-            var continuousActive = DateTime.UtcNow < _continuousUntilUtc &&
-                                   (_continuousLow > 0.0001f || _continuousHigh > 0.0001f);
+            var pluginMotorActive = DateTime.UtcNow < _continuousUntilUtc;
+            var activeLow = Math.Max(pluginMotorActive ? _continuousLow : 0f, _virtualLow) * _strength;
+            var activeHigh = Math.Max(pluginMotorActive ? _continuousHigh : 0f, _virtualHigh) * _strength;
+            var continuousActive = activeLow > 0.0001f || activeHigh > 0.0001f;
             for (var frame = 0; frame < frameCount; frame++)
             {
                 double left = 0;
@@ -302,8 +321,8 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
                 {
                     _continuousLowPhase += 2.0 * Math.PI * 72.0 / SampleRate;
                     _continuousHighPhase += 2.0 * Math.PI * 162.0 / SampleRate;
-                    var low = Math.Sin(_continuousLowPhase) * _continuousLow * _strength;
-                    var high = Math.Sin(_continuousHighPhase) * _continuousHigh * _strength;
+                    var low = Math.Sin(_continuousLowPhase) * activeLow;
+                    var high = Math.Sin(_continuousHighPhase) * activeHigh;
                     left += (low + high * 0.56) * 0.64;
                     right += (low * 0.86 + high * 0.82) * 0.64;
                 }
@@ -315,6 +334,11 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
                 var rightSample = ToInt16(right);
                 var target = offset + frame * bytesPerFrame;
 
+                _renderedFrames++;
+                if (leftSample != 0 || rightSample != 0) _nonZeroRenderedFrames++;
+                _renderPeak = Math.Max(_renderPeak,
+                    Math.Max(Math.Abs(leftSample / 32768f), Math.Abs(rightSample / 32768f)));
+
                 // Channels 1/2 are the controller speaker and remain silent.
                 // Channels 3/4 drive the left/right voice-coil haptic actuators.
                 WriteInt16(buffer, target + 0, 0);
@@ -325,6 +349,22 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         }
 
         return count;
+    }
+
+    public AudioRenderDiagnostic GetAndResetRenderDiagnostic()
+    {
+        lock (_gate)
+        {
+            var diagnostic = new AudioRenderDiagnostic(
+                _renderedFrames,
+                _nonZeroRenderedFrames,
+                _renderPeak,
+                _output?.PlaybackState.ToString() ?? "Stopped");
+            _renderedFrames = 0;
+            _nonZeroRenderedFrames = 0;
+            _renderPeak = 0;
+            return diagnostic;
+        }
     }
 
     private void MixGeneratedVoices(ref double left, ref double right)
@@ -543,6 +583,12 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         double DelaySeconds,
         bool Loop,
         float SourcePeak);
+
+    public readonly record struct AudioRenderDiagnostic(
+        long Frames,
+        long NonZeroFrames,
+        float Peak,
+        string PlaybackState);
 
     private struct SampleVoice(
         string key,

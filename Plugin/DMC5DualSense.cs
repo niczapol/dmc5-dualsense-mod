@@ -616,8 +616,12 @@ public static class DMC5DualSensePlugin
         identity = identity.ToLowerInvariant();
         if (identity.Contains("pl0000") || identity.Contains("nero")) return "nero";
         if (identity.Contains("pl0100") || identity.Contains("dante")) return "dante";
-        if (identity.Contains("pl0200") || identity.Contains("player_v") || identity.Contains(" v")) return "v";
+        // app.PlayerV lowercases to app.playerv. Check Vergil first because
+        // app.playervergil has the same prefix; the old player_v/" v" test
+        // therefore left V in the Void reported as unknown/inGameplay=false.
         if (identity.Contains("pl0400") || identity.Contains("vergil")) return "vergil";
+        if (identity.Contains("pl0200") || identity.Contains("player_v") ||
+            identity.Contains("playerv") || identity.Contains(" v")) return "v";
         return "unknown";
     }
 

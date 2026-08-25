@@ -4,7 +4,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.5.3-stable-gameplay-event-routing'
+$packageVersion = '1.5.4-direct-keybinding-detection'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {

@@ -52,8 +52,8 @@
     },
     {
       "Path": "natives/x64/ui/gui/ui8000/gui/ui8013.gui.270020",
-      "Size": 155442,
-      "Sha256": "CA683A5EC0562CAE91325739F1D10002BF81DC6BFBEAD4C831BFB36012B05539"
+      "Size": 155698,
+      "Sha256": "96CCCC9F2C737F3292ECEE58AD31160B5D8FFD6680350706C45FD8A96400F97D"
     },
     {
       "Path": "natives/x64/ui/gui/ui8000/tex/ui8013_iam.tex.11",

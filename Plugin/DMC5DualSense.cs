@@ -14,6 +14,10 @@ using via.hid;
 public static class DMC5DualSensePlugin
 {
     private const int Port = 27105;
+    // app.PadInput.GameAction values. Passing their underlying Int32 values
+    // avoids coupling the runtime script to generated enum assembly identities.
+    private const int GameActionAttackLarge = 1;
+    private const int GameActionSpecial2 = 14;
     private static UdpClient? _udp;
     private static DateTime _lastStateUtc = DateTime.MinValue;
     private static DateTime _lastErrorUtc = DateTime.MinValue;
@@ -220,9 +224,9 @@ public static class DMC5DualSensePlugin
             if (keyAssign is null) return;
 
             attackLargeButton = ToInt(keyAssign.Call(
-                "FindButton", app.PadInput.GameAction.AttackL));
+                "FindButton", GameActionAttackLarge));
             special2Button = ToInt(keyAssign.Call(
-                "FindButton", app.PadInput.GameAction.Special2));
+                "FindButton", GameActionSpecial2));
 
             if (attackLargeButton != _lastAttackLargeButton ||
                 special2Button != _lastSpecial2Button)

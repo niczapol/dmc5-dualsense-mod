@@ -4,7 +4,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.5.1-v-headless'
+$packageVersion = '1.5.2-hidden-steam-shell'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {

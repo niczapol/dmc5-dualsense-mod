@@ -344,7 +344,7 @@ try {
     $autostartInstalled = $true
 
     $manifest = [pscustomobject]@{
-        Version = '1.2.0-resident-bridge'
+        Version = '1.3.0-resident-ui'
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
         Files = $records

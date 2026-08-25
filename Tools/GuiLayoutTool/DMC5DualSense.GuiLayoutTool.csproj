@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DMC5DualSense.GuiLayoutTool</AssemblyName>
+    <ReeLibProject Condition="'$(ReeLibProject)' == ''">$(MSBuildProjectDirectory)\..\..\..\vendor\REE-Content-Editor\RE-Engine-Lib\REE-Lib\REE-Lib.csproj</ReeLibProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(ReeLibProject)" />
+  </ItemGroup>
+</Project>

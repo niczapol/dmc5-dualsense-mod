@@ -14,5 +14,5 @@ REFramework log spam observed during long sessions.
 - Upgrades an existing installation automatically while preserving configuration and
   diagnostic logs; unexpected unowned files still stop the installer safely.
 
-Install over an existing release with `Install-DMC5DualSense.cmd`; personal settings
+Install over an existing release with `INSTALL-DMC5-DualSense.cmd`; personal settings
 and backups are preserved.

@@ -1,4 +1,4 @@
-DMC5 DualSense Layer 1.4.0-isolated-input
+DMC5 DualSense Layer 1.5.0-session-audio
 Built: 2026-08-25
 Target: Devil May Cry 5 Steam, local Build ID 11025947
 Target controller: Sony DualSense CFI-ZCT1W, USB VID_054C/PID_0CE6
@@ -6,19 +6,19 @@ Bridge runtime: .NET 10, win-x64
 Steam launch: direct DualSense input -> ViGEm XInput + hidden launcher wrapper via %command%
 
 Bridge SHA256:
-85C19D82B389014177D4ECAB4CB0B974BEADB9A2FAD69E6EA86DE7AB54430DAE
+2C3C34A8F38F274306AB1002AAE21BDEAF1D06BAF02AFE9EA87B40D3CE6CD40E
 Plugin SHA256:
-49D702FB0179CF02B2F349BDC0406E1D011B944B52A1A9DCA681B9BD86D6C4CF
+ACDE3864578CDC80298F77C4E559E0820D5B1D1BFF48075DBF041EE4A7CB3C0F
 Launcher SHA256:
-5F3C47D3C6120FA6D402C7FF894A27D23DA42CFEB25158B2AF76F0E19FBE47EF
+644547E0FD0C9506CE37CD0CDBA0EB4E1AC66147D37E7391775E79F5D657AF8C
 Legacy startup CMD SHA256:
 7D613EA210A61761033EF721BD7328F09B351773DD3EC4C16FBF664B3D76F9BE
 Installer SHA256:
-0096E02195F99C493FDE15628C2B7D77169BFEF0946B6A9B05AE8356C31DC10E
+FD3C4A5C1CE5018471152947CADD77A846701B99F464F6BDCAABA64C5ACE1F00
 Uninstaller SHA256:
 81A4B6A7D4F5C1C0E00FFDD37F85906D88F59E293169C35F53495DC2D7A1E0A0
 Default config SHA256:
-6BB6E55D782B381A0DEA0DA93D90C8FD72A2F0D2CA1563476C3FF4F3E7385089
+B3E8D27B13E7F38B5C6C58DC433BD7369243E2CBA1A0A81BC4F3CB12339019AE
 
 UI resources SHA256:
 97915422310A77A5BFE52D9BB668B478DEFB8577D911236DE4B4D04970196861  ui0010_iam.tex.11.x64
@@ -42,15 +42,17 @@ PS5 behavior transferred:
 - V and Vergil adaptive triggers remain Off where the PS5 code has no branch.
 
 PC/UI integration:
-- stock PadShake and motor telemetry with a 180 ms release watchdog;
+- authoritative setMotorPower telemetry with a 180 ms release watchdog;
 - post-createShell Ebony/Ivory classification and de-spammed charge events;
 - PlayStation prompts and actual DualSense art;
 - aspect-correct DualSense art with calibrated face buttons, D-pad, sticks, shoulders, touchpad and Options;
 - only target 4x4 BC7 regions are recompressed; all ordinary PlayStation prompt blocks remain byte-identical;
 - exact reversible invalidation of two GUI PAK hash pairs; resource payload is untouched;
-- resident bridge owns direct DualSense input/output while Steam Input is disabled for app 601150;
+- session bridge owns direct DualSense input/output while Steam Input is disabled for app 601150;
 - physical input is atomically mirrored to a ViGEm Xbox 360 target for DMC5 XInput compatibility;
-- launcher reuses a live resident PID and verifies fresh HID/audio/direct-input/virtual-XInput readiness before starting Steam app 601150;
+- launcher creates the bridge before DMC5, verifies fresh HID/audio/direct-input/virtual-XInput readiness and tears it down after exit;
+- the DualSense haptics endpoint volume/mute state is raised only for the DMC5 session and restored on shutdown;
 - five-second diagnostics prove HID writes, trigger/rumble activity, audio frames and physical-to-virtual input throughput;
-- temporary fallback bridge remains parent-scoped and shuts down after the game;
-- player polling checks RE Engine metadata before reading fields, eliminating menu-time missing-member log spam.
+- the plugin fallback bridge remains parent-scoped and shuts down after the game;
+- inherited player state uses direct REFramework field access, restoring character detection and adaptive-trigger output;
+- the invalid PadShake accessor hook is removed; the final motor path remains complete without REFramework log spam.

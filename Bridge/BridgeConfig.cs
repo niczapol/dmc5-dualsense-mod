@@ -15,6 +15,8 @@ internal sealed class BridgeConfig
     public bool EnableVirtualXInput { get; set; } = true;
     public bool EnableCalibrationLog { get; set; } = true;
     public string AudioDeviceContains { get; set; } = "DualSense Wireless Controller";
+    public bool EnsureHapticsEndpointAudible { get; set; } = true;
+    public float HapticsEndpointVolume { get; set; } = 1.0f;
 
     public static BridgeConfig Load(string path)
     {

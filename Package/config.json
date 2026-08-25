@@ -9,5 +9,7 @@
   "EnableLightbar": true,
   "EnableVirtualXInput": true,
   "EnableCalibrationLog": true,
-  "AudioDeviceContains": "DualSense Wireless Controller"
+  "AudioDeviceContains": "DualSense Wireless Controller",
+  "EnsureHapticsEndpointAudible": true,
+  "HapticsEndpointVolume": 1.0
 }

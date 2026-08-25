@@ -242,16 +242,6 @@ $backupRoot = Join-Path $modDir 'backup'
 $records = [Collections.Generic.List[object]]::new()
 $createdDirectories = [Collections.Generic.List[string]]::new()
 $pakInvalidations = [Collections.Generic.List[object]]::new()
-$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$runValueName = 'DMC5DualSense'
-$runValueExisted = $false
-$runValueBefore = $null
-$autostartInstalled = $false
-
-try {
-    $runValueBefore = [string](Get-ItemPropertyValue -LiteralPath $runKey -Name $runValueName -ErrorAction Stop)
-    $runValueExisted = $true
-} catch { }
 
 try {
     New-Item -ItemType Directory -Path $temporary | Out-Null
@@ -353,35 +343,20 @@ try {
         $pakInvalidations.Add($invalidation)
     }
 
-    $launcherTarget = Join-Path $modDir 'DMC5DualSense.Launcher.exe'
-    $autostartCommand = '"' + $launcherTarget + '" --background'
-    New-Item -Path $runKey -Force | Out-Null
-    New-ItemProperty -LiteralPath $runKey -Name $runValueName -PropertyType String -Value $autostartCommand -Force | Out-Null
-    $autostartInstalled = $true
-
     $manifest = [pscustomobject]@{
-        Version = '1.4.0-isolated-input'
+        Version = '1.5.0-session-audio'
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
         Files = $records
         CreatedDirectories = $createdDirectories
         PakInvalidations = $pakInvalidations
-        Autostart = [pscustomobject]@{
-            RegistryPath = $runKey
-            ValueName = $runValueName
-            InstalledValue = $autostartCommand
-            PreviousValueExisted = $runValueExisted
-            PreviousValue = $runValueBefore
-        }
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
-
-    Start-Process -FilePath $launcherTarget -ArgumentList '--background' -WindowStyle Hidden
 
     Write-Host ''
     Write-Host 'DMC5 DualSense Layer установлен.' -ForegroundColor Green
     Write-Host "Игра: $resolvedGameDir"
-    Write-Host 'Фоновый bridge зарегистрирован в автозапуске.'
+    Write-Host 'Bridge запускается только на время DMC5 и закрывается вместе с игрой.'
     Write-Host 'Он читает DualSense напрямую, а управление передаёт в DMC5 через ViGEm XInput.'
     Write-Host 'Для DMC5 обязательно отключите Steam Input: Свойства -> Контроллер -> Отключить.' -ForegroundColor Yellow
     Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
@@ -389,13 +364,6 @@ try {
     Write-Host ('"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%') -ForegroundColor Cyan
 }
 catch {
-    if ($autostartInstalled) {
-        if ($runValueExisted) {
-            New-ItemProperty -LiteralPath $runKey -Name $runValueName -PropertyType String -Value $runValueBefore -Force | Out-Null
-        } else {
-            Remove-ItemProperty -LiteralPath $runKey -Name $runValueName -ErrorAction SilentlyContinue
-        }
-    }
     Restore-PakInvalidations $resolvedGameDir @($pakInvalidations)
     for ($recordIndex = $records.Count - 1; $recordIndex -ge 0; $recordIndex--) {
         $record = $records[$recordIndex]

@@ -1,22 +1,22 @@
-DMC5 DualSense Layer 1.1.0-steam-native
+DMC5 DualSense Layer 1.2.0-resident-bridge
 Built: 2026-08-25
 Target: Devil May Cry 5 Steam, local Build ID 11025947
 Target controller: Sony DualSense CFI-ZCT1W, USB VID_054C/PID_0CE6
 Bridge runtime: .NET 10, win-x64
-Steam launch: hidden DMC5DualSense.Launcher.exe wrapper via %command%
+Steam launch: resident bridge from HKCU Run + hidden launcher wrapper via %command%
 
 Bridge SHA256:
-8EA764344FB1804657AA29EC8D5D0BF14B033135DDC37051AAB2F325AB4BD718
+E6A395F6BD1DDF3EB75441F5656FDFAA76036361600CADEF38CCEB78D633BDEE
 Plugin SHA256:
-89A6314C6D921822DECC181690F49740B7D433A9C4A6A349F3549D2DB1A72065
+70247F77133057E44875C791586E49F1075DDB808E28902D2325F852BAF33D16
 Launcher SHA256:
-DFEBA9F204CFAFECF48AAD61DAE86FAE20706F456813C5CD1B3EB1DFEBB79CF7
+4C3FD0FE7DFAE112C7C8C1A69945D9845A786B3B3BEB375C3A571C2FF8DA6229
 Legacy startup CMD SHA256:
 7D613EA210A61761033EF721BD7328F09B351773DD3EC4C16FBF664B3D76F9BE
 Installer SHA256:
-777BE8557A994DCFD6110ADAC49DB8DC63CE04A92CBB664616FD0A2CA2F4D33A
+2002AD8466AF45E57078D1026474BB938B1A079305118CF8E07A2F6264262736
 Uninstaller SHA256:
-030528D90BEBCAB196D84AD181F3B73B288F1B3CA2F810C2F53F36E339D4E280
+DF03CAFBF3D94C39E2135EE6295AB70B3115C8499FF9458741CA46097A0CC955
 Default config SHA256:
 339EBD8672D8CD9495623D77E50E0CF9C1190F03203057DC6C91F804BDEF7A4E
 
@@ -47,4 +47,7 @@ PC/UI integration:
 - PlayStation prompts and actual DualSense art;
 - PC c_XB1 GUI nodes patched to internal PS4 geometry for correct D-pad/stick/highlights;
 - exact reversible invalidation of two GUI PAK hash pairs; resource payload is untouched;
-- verified launcher waits for the bridge HID/audio readiness report before starting Steam app 601150.
+- resident bridge opens raw DualSense HID before Steam Input can hide it;
+- launcher reuses a live resident PID and verifies fresh HID/audio readiness before starting Steam app 601150;
+- temporary fallback bridge remains parent-scoped and shuts down after the game;
+- player polling checks RE Engine metadata before reading fields, eliminating menu-time missing-member log spam.

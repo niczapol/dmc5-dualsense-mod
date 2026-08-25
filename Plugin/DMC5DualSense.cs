@@ -28,6 +28,7 @@ public static class DMC5DualSensePlugin
     private static DateTime _lastWeaponHitUtc = DateTime.MinValue;
     private static DateTime _lastDanteShotUtc = DateTime.MinValue;
     private static DateTime _lastBlueRoseShotUtc = DateTime.MinValue;
+    private static DateTime _nextMissingPlayerPollUtc = DateTime.MinValue;
     private static int _lastExceedStock = -1;
     private static bool _blueRoseCharging;
     [ThreadStatic] private static IObject? _pendingDanteShellPlayer;
@@ -64,7 +65,6 @@ public static class DMC5DualSensePlugin
     [PluginExitPoint]
     public static void OnUnload()
     {
-        try { Send("{\"v\":1,\"type\":\"shutdown\"}"); } catch { }
         _udp?.Dispose();
         _udp = null;
         LogInfo("Plugin unloaded.");
@@ -75,20 +75,29 @@ public static class DMC5DualSensePlugin
     {
         if (_udp is null || DateTime.UtcNow - _lastStateUtc < TimeSpan.FromMilliseconds(50)) return;
         _lastStateUtc = DateTime.UtcNow;
+        if (DateTime.UtcNow < _nextMissingPlayerPollUtc) return;
 
         try
         {
             var manager = API.GetManagedSingleton("app.PlayerManager") as IObject;
-            var player = manager?.GetField("manualPlayer") as IObject;
+            var player = manager is null
+                ? null
+                : GetFieldIfPresent(manager, "manualPlayer") as IObject;
 
             if (player is null)
             {
-                SendState("unknown", false, 0, 0, 0, 0, 0);
-                _lastHp = -1;
-                _lastExceedStock = -1;
-                _blueRoseCharging = false;
+                PublishMissingPlayerState();
                 return;
             }
+
+            var character = DetectCharacter(player);
+            if (character == "unknown")
+            {
+                PublishMissingPlayerState();
+                return;
+            }
+
+            _nextMissingPlayerPollUtc = DateTime.MinValue;
 
             if (!_playerTypeDumped)
             {
@@ -96,9 +105,8 @@ public static class DMC5DualSensePlugin
                 _playerTypeDumped = true;
             }
 
-            var hp = ToSingle(player.GetField("hp"));
-            var maxHp = ToSingle(player.GetField("maxHp"));
-            var character = DetectCharacter(player);
+            var hp = ToSingle(GetFieldIfPresent(player, "hp"));
+            var maxHp = ToSingle(GetFieldIfPresent(player, "maxHp"));
             ReadMotion(player, out var motionBank, out var motionId, out var motionFrame);
             ReadGamePad(out var triggerLeft, out var triggerRight);
 
@@ -175,6 +183,15 @@ public static class DMC5DualSensePlugin
         {
             LogThrottled("Telemetry error: " + ex.Message);
         }
+    }
+
+    private static void PublishMissingPlayerState()
+    {
+        _nextMissingPlayerPollUtc = DateTime.UtcNow.AddMilliseconds(750);
+        SendState("unknown", false, 0, 0, 0, 0, 0);
+        _lastHp = -1;
+        _lastExceedStock = -1;
+        _blueRoseCharging = false;
     }
 
     private static void InstallGameplayHooks()
@@ -615,15 +632,21 @@ public static class DMC5DualSensePlugin
     {
         var identity = "";
 
-        try { identity += " " + Convert.ToString(player.Call("get_NetworkName"), CultureInfo.InvariantCulture); }
+        // The concrete managed type already identifies every playable class.
+        // Calling get_NetworkName on DMC5's player objects makes REFramework log
+        // a failed method lookup every update because that method is not present.
+        try { identity += " " + player.GetTypeDefinition().FullName; }
         catch { }
 
-        try
+        if (!ContainsCharacterIdentity(identity))
         {
-            var gameObject = player.Call("get_GameObject") as IObject;
-            identity += " " + Convert.ToString(gameObject?.Call("get_Name"), CultureInfo.InvariantCulture);
+            try
+            {
+                var gameObject = player.Call("get_GameObject") as IObject;
+                identity += " " + Convert.ToString(gameObject?.Call("get_Name"), CultureInfo.InvariantCulture);
+            }
+            catch { }
         }
-        catch { }
 
         identity = identity.ToLowerInvariant();
         if (identity.Contains("pl0000") || identity.Contains("nero")) return "nero";
@@ -631,6 +654,39 @@ public static class DMC5DualSensePlugin
         if (identity.Contains("pl0200") || identity.Contains("player_v") || identity.Contains(" v")) return "v";
         if (identity.Contains("pl0400") || identity.Contains("vergil")) return "vergil";
         return "unknown";
+    }
+
+    private static bool ContainsCharacterIdentity(string identity)
+    {
+        var lower = identity.ToLowerInvariant();
+        return lower.Contains("playernero") || lower.Contains("playerdante") ||
+               lower.Contains("playerv") || lower.Contains("playervergil") ||
+               lower.Contains("pl0000") || lower.Contains("pl0100") ||
+               lower.Contains("pl0200") || lower.Contains("pl0400");
+    }
+
+    private static object? GetFieldIfPresent(IObject instance, string fieldName)
+    {
+        try
+        {
+            var type = instance.GetTypeDefinition();
+            while (type is not null)
+            {
+                foreach (var field in type.Fields)
+                {
+                    if (field.Name.Equals(fieldName, StringComparison.Ordinal))
+                        return instance.GetField(fieldName);
+                }
+
+                type = type.ParentType;
+            }
+        }
+        catch
+        {
+            // Runtime objects can disappear between lookup and access.
+        }
+
+        return null;
     }
 
     private static void SendState(

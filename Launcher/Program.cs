@@ -30,6 +30,9 @@ internal static class Program
             }
         }
 
+        if (args.Any(arg => arg.Equals("--background", StringComparison.OrdinalIgnoreCase)))
+            return EnsureResidentBridge(baseDirectory, readyPath, Log);
+
         var gameExecutable = ResolveGameExecutable(args, baseDirectory);
         if (gameExecutable is null)
         {
@@ -39,19 +42,36 @@ internal static class Program
 
         var gameArguments = ResolveGameArguments(args, gameExecutable);
         Process? bridge = null;
+        var ownsBridge = false;
+        var activeBridgePid = 0;
+        var requireAdvancedHaptics = LoadSettings(baseDirectory).EnableAdvancedHaptics;
 
         try
         {
-            StopExistingBridge();
-            Thread.Sleep(250);
-            TryDelete(readyPath);
+            var ready = ReadLiveBridgeReady(readyPath);
+            if (ready is not null)
+            {
+                activeBridgePid = ready.Pid;
+                Log($"Reusing live bridge PID {ready.Pid} (resident={ready.Resident}).");
+                ready = WaitForBridgeReady(readyPath, ready.Pid, TimeSpan.FromSeconds(6),
+                    requireAdvancedHaptics);
+            }
+            else
+            {
+                TryDelete(readyPath);
+                TryDelete(readyPath + ".tmp");
+                bridge = StartBridge(baseDirectory, Log, resident: false);
+                ownsBridge = bridge is not null;
+                activeBridgePid = bridge?.Id ?? 0;
+                if (bridge is not null)
+                    ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(6),
+                        requireAdvancedHaptics);
+            }
 
-            bridge = StartBridge(baseDirectory, Log);
-            if (bridge is null)
+            if (activeBridgePid == 0)
                 Log("Bridge could not be started; DMC5 will still be launched.");
             else
             {
-                var ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(6));
                 if (ready is null)
                     Log("Bridge readiness timed out; DMC5 will still be launched.");
                 else
@@ -75,7 +95,8 @@ internal static class Program
                 return 3;
             }
 
-            Log($"DMC5 started as PID {game.Id}; bridge PID {bridge?.Id.ToString(CultureInfo.InvariantCulture) ?? "none"}.");
+            Log($"DMC5 started as PID {game.Id}; bridge PID " +
+                (activeBridgePid == 0 ? "none" : activeBridgePid.ToString(CultureInfo.InvariantCulture)) + ".");
             game.WaitForExit();
             Log($"DMC5 exited with code {game.ExitCode}.");
             return game.ExitCode;
@@ -87,24 +108,67 @@ internal static class Program
         }
         finally
         {
-            StopExistingBridge();
-            if (bridge is not null)
+            if (ownsBridge)
             {
+                StopExistingBridge();
                 try
                 {
-                    if (!bridge.WaitForExit(2000)) bridge.Kill(entireProcessTree: true);
+                    if (bridge is not null && !bridge.WaitForExit(2000))
+                        bridge.Kill(entireProcessTree: true);
                 }
                 catch
                 {
                     // The bridge may already have exited through its parent monitor.
                 }
-                bridge.Dispose();
+                bridge?.Dispose();
+                TryDelete(readyPath);
             }
-            TryDelete(readyPath);
         }
     }
 
-    private static Process? StartBridge(string baseDirectory, Action<string> log)
+    private static int EnsureResidentBridge(
+        string baseDirectory,
+        string readyPath,
+        Action<string> log)
+    {
+        var existing = ReadLiveBridgeReady(readyPath);
+        if (existing?.Resident == true)
+        {
+            log($"Resident bridge already running as PID {existing.Pid}: " +
+                $"controller={existing.ControllerReady}, advancedHaptics={existing.AdvancedHapticsReady}.");
+            return 0;
+        }
+
+        if (existing is not null)
+        {
+            log($"A session bridge is already running as PID {existing.Pid}; " +
+                "it cannot be replaced while DMC5 is active.");
+            return 5;
+        }
+
+        TryDelete(readyPath);
+        TryDelete(readyPath + ".tmp");
+        using var bridge = StartBridge(baseDirectory, log, resident: true);
+        if (bridge is null) return 2;
+
+        var settings = LoadSettings(baseDirectory);
+        var ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(8),
+            settings.EnableAdvancedHaptics);
+        if (ready is null)
+        {
+            log("Resident bridge readiness timed out.");
+            return 3;
+        }
+
+        log($"Resident bridge ready as PID {ready.Pid}: controller={ready.ControllerReady}, " +
+            $"advancedHaptics={ready.AdvancedHapticsReady}, {ready.Description}");
+        return ready.ControllerReady &&
+               (!settings.EnableAdvancedHaptics || ready.AdvancedHapticsReady)
+            ? 0
+            : 4;
+    }
+
+    private static Process? StartBridge(string baseDirectory, Action<string> log, bool resident)
     {
         var path = Path.Combine(baseDirectory, "DMC5DualSense.Bridge.exe");
         if (!File.Exists(path))
@@ -116,7 +180,9 @@ internal static class Program
         return Process.Start(new ProcessStartInfo
         {
             FileName = path,
-            Arguments = "--parent " + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+            Arguments = resident
+                ? "--resident"
+                : "--parent " + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
             WorkingDirectory = baseDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -157,9 +223,35 @@ internal static class Program
         }
     }
 
-    private static BridgeReady? WaitForBridgeReady(string path, int processId, TimeSpan timeout)
+    private static BridgeReady? ReadLiveBridgeReady(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            var status = JsonSerializer.Deserialize<BridgeReady>(File.ReadAllText(path),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (status is null || status.Pid <= 0 || status.Utc == default ||
+                DateTime.UtcNow - status.Utc > TimeSpan.FromSeconds(5)) return null;
+            using var process = Process.GetProcessById(status.Pid);
+            return process.HasExited ||
+                   !process.ProcessName.Equals("DMC5DualSense.Bridge", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : status;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static BridgeReady? WaitForBridgeReady(
+        string path,
+        int processId,
+        TimeSpan timeout,
+        bool requireAdvancedHaptics)
     {
         var deadline = DateTime.UtcNow + timeout;
+        BridgeReady? latest = null;
         while (DateTime.UtcNow < deadline)
         {
             try
@@ -168,7 +260,13 @@ internal static class Program
                 {
                     var status = JsonSerializer.Deserialize<BridgeReady>(File.ReadAllText(path),
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (status?.Pid == processId) return status;
+                    if (status?.Pid == processId)
+                    {
+                        latest = status;
+                        if (status.ControllerReady &&
+                            (!requireAdvancedHaptics || status.AdvancedHapticsReady))
+                            return status;
+                    }
                 }
             }
             catch
@@ -177,7 +275,23 @@ internal static class Program
             }
             Thread.Sleep(50);
         }
-        return null;
+        return latest;
+    }
+
+    private static LauncherSettings LoadSettings(string baseDirectory)
+    {
+        try
+        {
+            var path = Path.Combine(baseDirectory, "config.json");
+            if (!File.Exists(path)) return new LauncherSettings();
+            return JsonSerializer.Deserialize<LauncherSettings>(File.ReadAllText(path),
+                       new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                   ?? new LauncherSettings();
+        }
+        catch
+        {
+            return new LauncherSettings();
+        }
     }
 
     private static void TryDelete(string path)
@@ -189,8 +303,15 @@ internal static class Program
     private sealed class BridgeReady
     {
         public int Pid { get; set; }
+        public bool Resident { get; set; }
         public bool ControllerReady { get; set; }
         public bool AdvancedHapticsReady { get; set; }
         public string Description { get; set; } = "";
+        public DateTime Utc { get; set; }
+    }
+
+    private sealed class LauncherSettings
+    {
+        public bool EnableAdvancedHaptics { get; set; } = true;
     }
 }

@@ -13,6 +13,8 @@ internal static class Program
 
     private static async Task<int> Main(string[] args)
     {
+        var resident = args.Any(arg =>
+            arg.Equals("--resident", StringComparison.OrdinalIgnoreCase));
         using var singleInstance = new Mutex(
             initiallyOwned: true,
             name: "Local\\DMC5DualSense.Bridge",
@@ -39,6 +41,9 @@ internal static class Program
         };
 
         StartParentMonitor(args, Log);
+        Log(resident
+            ? "Resident bridge started before Steam game launch."
+            : "Session bridge started for the current DMC5 process.");
 
         using var controller = new DualSenseDevice();
         using var haptics = new HapticEngine(config.HapticsStrength);
@@ -97,10 +102,10 @@ internal static class Program
 
         using var udp = new UdpClient(new IPEndPoint(IPAddress.Loopback, config.Port));
         Log($"Listening for DMC5 telemetry on 127.0.0.1:{config.Port}.");
-        WriteReadyStatus(readyPath, foundController, audioStarted, controller.Description);
+        WriteReadyStatus(readyPath, resident, foundController, audioStarted, controller.Description);
 
-        var receiver = ReceiveLoop(udp, haptics, config, Log, Shutdown.Token);
-        var output = OutputLoop(controller, haptics, config, Log, Shutdown.Token);
+        var receiver = ReceiveLoop(udp, haptics, config, Log, !resident, Shutdown.Token);
+        var output = OutputLoop(controller, haptics, config, resident, readyPath, Log, Shutdown.Token);
 
         try
         {
@@ -113,6 +118,7 @@ internal static class Program
         {
             controller.Reset();
             TryDelete(readyPath);
+            TryDelete(readyPath + ".tmp");
         }
 
         return 0;
@@ -120,6 +126,7 @@ internal static class Program
 
     private static void WriteReadyStatus(
         string path,
+        bool resident,
         bool controllerReady,
         bool advancedHapticsReady,
         string description)
@@ -129,12 +136,15 @@ internal static class Program
             var json = JsonSerializer.Serialize(new
             {
                 pid = Environment.ProcessId,
+                resident,
                 controllerReady,
                 advancedHapticsReady,
                 description,
                 utc = DateTime.UtcNow
             });
-            File.WriteAllText(path, json);
+            var temporary = path + ".tmp";
+            File.WriteAllText(temporary, json);
+            File.Move(temporary, path, overwrite: true);
         }
         catch
         {
@@ -222,6 +232,7 @@ internal static class Program
         HapticEngine haptics,
         BridgeConfig config,
         Action<string> log,
+        bool allowRemoteShutdown,
         CancellationToken cancellationToken)
     {
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -362,8 +373,11 @@ internal static class Program
                     break;
 
                 case "shutdown":
-                    log("Game plugin requested shutdown.");
-                    Shutdown.Cancel();
+                    if (allowRemoteShutdown)
+                    {
+                        log("Session bridge received shutdown request.");
+                        Shutdown.Cancel();
+                    }
                     break;
             }
 
@@ -405,11 +419,16 @@ internal static class Program
         DualSenseDevice controller,
         HapticEngine haptics,
         BridgeConfig config,
+        bool resident,
+        string readyPath,
         Action<string> log,
         CancellationToken cancellationToken)
     {
         var start = DateTime.UtcNow;
         var wasConnected = controller.Connected;
+        var wasAudioReady = haptics.Started;
+        var nextAudioRetryUtc = DateTime.MinValue;
+        var nextStatusWriteUtc = DateTime.MinValue;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -435,12 +454,38 @@ internal static class Program
             };
 
             var connected = controller.Write(command);
+            var audioReady = haptics.Started;
+            if (config.EnableAdvancedHaptics && !audioReady &&
+                DateTime.UtcNow >= nextAudioRetryUtc)
+            {
+                nextAudioRetryUtc = DateTime.UtcNow.AddSeconds(1);
+                audioReady = haptics.Start(config.AudioDeviceContains);
+            }
+
+            var statusChanged = connected != wasConnected || audioReady != wasAudioReady;
+
             if (connected != wasConnected)
             {
                 log(connected
                     ? $"DualSense reconnected: {controller.Description}"
                     : $"DualSense disconnected: {controller.Description}");
                 wasConnected = connected;
+            }
+
+            if (audioReady != wasAudioReady)
+            {
+                log(audioReady
+                    ? $"Advanced haptics audio reconnected: {haptics.Status}"
+                    : $"Advanced haptics audio disconnected: {haptics.Status}");
+                wasAudioReady = audioReady;
+            }
+
+            // Refresh periodically as well as on transitions so launchers can
+            // reject a stale status file left by a crashed process.
+            if (statusChanged || DateTime.UtcNow >= nextStatusWriteUtc)
+            {
+                nextStatusWriteUtc = DateTime.UtcNow.AddSeconds(2);
+                WriteReadyStatus(readyPath, resident, connected, audioReady, controller.Description);
             }
 
             await Task.Delay(33, cancellationToken);

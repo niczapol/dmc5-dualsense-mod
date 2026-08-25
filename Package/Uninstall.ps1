@@ -51,6 +51,24 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
 Get-Process -Name 'DMC5DualSense.Bridge' -ErrorAction SilentlyContinue | Stop-Process -Force
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 
+if ($manifest.Autostart) {
+    $autostart = $manifest.Autostart
+    $currentValue = $null
+    try {
+        $currentValue = [string](Get-ItemPropertyValue -LiteralPath $autostart.RegistryPath -Name $autostart.ValueName -ErrorAction Stop)
+    } catch { }
+
+    if ($currentValue -eq [string]$autostart.InstalledValue) {
+        if ($autostart.PreviousValueExisted) {
+            New-ItemProperty -LiteralPath $autostart.RegistryPath -Name $autostart.ValueName -PropertyType String -Value ([string]$autostart.PreviousValue) -Force | Out-Null
+        } else {
+            Remove-ItemProperty -LiteralPath $autostart.RegistryPath -Name $autostart.ValueName -ErrorAction SilentlyContinue
+        }
+    } elseif ($null -ne $currentValue) {
+        Write-Warning 'Запись автозапуска была изменена после установки и оставлена как есть.'
+    }
+}
+
 foreach ($record in @($manifest.PakInvalidations)) {
     $pakPath = Join-Path $resolvedGameDir $record.PakRelativePath
     if (-not (Test-Path -LiteralPath $pakPath -PathType Leaf)) {

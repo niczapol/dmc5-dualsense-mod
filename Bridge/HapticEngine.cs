@@ -36,6 +36,7 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
     public WaveFormat WaveFormat { get; }
     public string Status => _status;
+    public bool Started => _output is not null;
     public int OriginalSampleCount => _samples.Count;
 
     public IReadOnlyList<OriginalSampleDiagnostic> GetOriginalSampleDiagnostics() =>
@@ -57,6 +58,8 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
     public bool Start(string deviceNameFragment)
     {
+        if (_output is not null) return true;
+
         try
         {
             using var enumerator = new MMDeviceEnumerator();

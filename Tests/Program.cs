@@ -94,6 +94,18 @@ Run("DualSense controls map atomically to the expected Xbox report", () =>
     Equal((short)-32767, input.RightThumbY);
 });
 
+Run("DualSense touchpad click maps to Xbox Back and releases cleanly", () =>
+{
+    var bytes = NeutralDualSenseReport();
+    bytes[10] = 0x02;
+    Equal(true, DualSenseInputReport.TryParse(bytes, out var pressed));
+    Equal((ushort)0x0020, pressed.Buttons);
+
+    bytes[10] = 0;
+    Equal(true, DualSenseInputReport.TryParse(bytes, out var released));
+    Equal((ushort)0, released.Buttons);
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, failures));

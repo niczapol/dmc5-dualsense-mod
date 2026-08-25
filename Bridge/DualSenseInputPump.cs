@@ -13,6 +13,7 @@ internal sealed class DualSenseInputPump : IDisposable
     private HidStream? _stream;
     private string _status = "not started";
     private long _validReports;
+    private int _lastSystemButtons;
 
     public DualSenseInputPump(VirtualXboxInput virtualInput, Action<string> log)
     {
@@ -68,6 +69,7 @@ internal sealed class DualSenseInputPump : IDisposable
                 if (read > 0 && DualSenseInputReport.TryParse(buffer.AsSpan(0, read), out var report))
                 {
                     Interlocked.Increment(ref _validReports);
+                    LogSystemButtonTransition(buffer, report);
                     _virtualInput.Submit(report);
                 }
             }
@@ -81,6 +83,24 @@ internal sealed class DualSenseInputPump : IDisposable
                 Disconnect(ex.Message);
             }
         }
+    }
+
+    private void LogSystemButtonTransition(byte[] buffer, XboxInputReport report)
+    {
+        // Log only edges of the four central controls. This makes touchpad input
+        // failures diagnosable without adding another 250 lines per second.
+        var systemButtons = (buffer[9] & 0x30) | ((buffer[10] & 0x03) << 8);
+        if (systemButtons == _lastSystemButtons) return;
+
+        var previous = _lastSystemButtons;
+        _lastSystemButtons = systemButtons;
+        if (systemButtons == 0 && previous == 0) return;
+
+        _log($"Direct input system buttons: Create={((buffer[9] & 0x10) != 0 ? 1 : 0)}, " +
+             $"Options={((buffer[9] & 0x20) != 0 ? 1 : 0)}, " +
+             $"PS={((buffer[10] & 0x01) != 0 ? 1 : 0)}, " +
+             $"Touchpad={((buffer[10] & 0x02) != 0 ? 1 : 0)}, " +
+             $"mapped=0x{report.Buttons:X4}.");
     }
 
     private bool EnsureConnected()

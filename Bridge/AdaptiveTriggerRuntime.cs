@@ -17,6 +17,10 @@ internal sealed class AdaptiveTriggerRuntime
     private TriggerSide _exceedSide = TriggerSide.Left;
     private TriggerSide _neroAttackLargeSide;
     private TriggerSide _danteAttackLargeSide;
+    private TriggerSide _neroAttackLargeCandidate;
+    private TriggerSide _danteAttackLargeCandidate;
+    private int _neroAttackLargeCandidateVotes;
+    private int _danteAttackLargeCandidateVotes;
 
     public string ExceedMapping
     {
@@ -48,13 +52,23 @@ internal sealed class AdaptiveTriggerRuntime
                 case "gun_charge_start":
                 case "gun_charge_level":
                 case "blue_rose_shot":
-                    LearnSide(ref _neroAttackLargeSide, input, 0.55f);
+                    LearnStableSide(
+                        ref _neroAttackLargeSide,
+                        ref _neroAttackLargeCandidate,
+                        ref _neroAttackLargeCandidateVotes,
+                        input,
+                        0.55f);
                     break;
 
                 case "dante_ebony_shot":
                 case "dante_ivory_shot":
                 case "dante_coyote_shot":
-                    LearnSide(ref _danteAttackLargeSide, input, 0.55f);
+                    LearnStableSide(
+                        ref _danteAttackLargeSide,
+                        ref _danteAttackLargeCandidate,
+                        ref _danteAttackLargeCandidateVotes,
+                        input,
+                        0.55f);
                     break;
             }
         }
@@ -130,11 +144,56 @@ internal sealed class AdaptiveTriggerRuntime
         XInputSnapshot input,
         float threshold)
     {
-        if (!input.Connected) return;
-        if (input.LeftTrigger < threshold && input.RightTrigger < threshold) return;
-        if (Math.Abs(input.LeftTrigger - input.RightTrigger) < 0.12f) return;
+        var detected = DetectSide(input, threshold);
+        if (detected != TriggerSide.None) side = detected;
+    }
 
-        side = input.LeftTrigger > input.RightTrigger
+    private static void LearnStableSide(
+        ref TriggerSide side,
+        ref TriggerSide candidate,
+        ref int candidateVotes,
+        XInputSnapshot input,
+        float threshold)
+    {
+        // AttackL is a face button in the stock layout. One coincidental L2/R2
+        // press during a shot therefore cannot prove that the action was remapped.
+        // Require three consecutive matching shot/charge observations, then lock
+        // the side for the bridge session so ordinary weapon-switch presses cannot
+        // move an already established adaptive effect between the triggers.
+        if (side != TriggerSide.None) return;
+
+        var detected = DetectSide(input, threshold);
+        if (detected == TriggerSide.None)
+        {
+            candidate = TriggerSide.None;
+            candidateVotes = 0;
+            return;
+        }
+
+        if (candidate != detected)
+        {
+            candidate = detected;
+            candidateVotes = 1;
+            return;
+        }
+
+        candidateVotes++;
+        if (candidateVotes < 3) return;
+
+        side = candidate;
+        candidate = TriggerSide.None;
+        candidateVotes = 0;
+    }
+
+    private static TriggerSide DetectSide(XInputSnapshot input, float threshold)
+    {
+        if (!input.Connected) return TriggerSide.None;
+        if (input.LeftTrigger < threshold && input.RightTrigger < threshold)
+            return TriggerSide.None;
+        if (Math.Abs(input.LeftTrigger - input.RightTrigger) < 0.12f)
+            return TriggerSide.None;
+
+        return input.LeftTrigger > input.RightTrigger
             ? TriggerSide.Left
             : TriggerSide.Right;
     }

@@ -1,28 +1,18 @@
-# UI build tools
+# Build tools
 
-The repository does not contain extracted DMC5 textures, GUI files, or the
-third-party controller artwork. The two tools in this directory make the local
-UI build reproducible without committing copyrighted game payloads.
+The tools in this directory produce deterministic release and UI outputs for
+the DMC5 DualSense mod.
 
-`UiAssetBuilder` performs three deterministic operations:
+`Build-Release.ps1` validates required inputs, runs the test suite, publishes
+self-contained Windows executables, writes a per-file manifest, and creates a
+deterministic release ZIP with `CHECKSUMS.txt`.
 
-1. preserves the aspect ratio of the 1467x816 DualSense source image and places
-   it into the 1024x1024 and 512x512 controller atlases;
-2. draws the DualSense Create/Options system-button prompts;
-3. copies only selected 4x4 BC7 blocks into an original RE Engine TEX file.
+`UiAssetBuilder` prepares the DualSense controller atlases and PlayStation
+system-button prompts while preserving unaffected UI regions.
 
-The last step leaves every prompt and highlight block outside the explicitly
-listed controller/system-button rectangles byte-identical to the original
-PlayStation prompt mod. This prevents a second lossy BC7 pass over the ordinary
-button icons.
+`GuiLayoutTool` aligns the interactive button positions used by the controls
+menu and The Void with the visible DualSense diagram.
 
-`GuiLayoutTool` writes the matching physical button centers into the PC `c_XB1`
-nodes that DMC5 uses with Steam Input. Large controller clips use one coordinate
-for every active layer, while the Void diagram uses calibrated static panel
-positions. The default project reference expects REE-Lib in the sibling
-`work/vendor/REE-Content-Editor` checkout; pass `-p:ReeLibProject=...` to MSBuild
-to use another location.
-
-The local build uses the MIT-licensed Gamepad Asset Pack DualSense source and
-Microsoft DirectXTex `texconv` for `BC7_UNORM_SRGB`, one mip level. These external
-inputs and their licenses remain outside this repository.
+`GuiLayoutTool` uses REE-Lib. Its default project reference expects
+REE-Content-Editor in the documented sibling checkout; pass
+`-p:ReeLibProject=...` to MSBuild when using another location.

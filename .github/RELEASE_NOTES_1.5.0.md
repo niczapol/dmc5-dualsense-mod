@@ -5,15 +5,14 @@ layer for Devil May Cry 5 on Steam.
 
 ## Included
 
-- adaptive trigger profiles transferred from the PS5 Nero and Dante branches;
-- all 12 identified PS5 advanced-haptics events with their gain, pitch, delay,
-  and loop behavior;
+- PS5-style adaptive-trigger behavior for Nero and Dante;
+- the complete supported advanced-haptics event set;
 - ordinary PC rumble translated to DualSense actuators;
 - PS5 character lightbar colors for Nero, Dante, V, and Vergil;
 - direct USB DualSense input mirrored to a session-only ViGEm Xbox 360 device;
 - PlayStation prompts and an aligned DualSense diagram in controls and The Void;
 - normal Steam Play-button launch through a hidden session launcher;
-- reversible installation with file hashes, backups, and exact PAK hash restore.
+- reversible installation with file verification and backups.
 
 ## Installation
 

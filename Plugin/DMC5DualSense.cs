@@ -31,6 +31,8 @@ public static class DMC5DualSensePlugin
     private static DateTime _nextMissingPlayerPollUtc = DateTime.MinValue;
     private static int _lastExceedStock = -1;
     private static bool _blueRoseCharging;
+    private static int _lastAttackLargeButton = int.MinValue;
+    private static int _lastSpecial2Button = int.MinValue;
     private static readonly object _activePlayerGate = new();
     private static ulong _activePlayerAddress;
     private static string _activePlayerCharacter = "unknown";
@@ -117,6 +119,7 @@ public static class DMC5DualSensePlugin
             var maxHp = SafeCallSingle(player, "get_maxHp");
             ReadMotion(player, out var motionBank, out var motionId, out var motionFrame);
             ReadGamePad(out var triggerLeft, out var triggerRight);
+            ReadGameActionBindings(out var attackLargeButton, out var special2Button);
 
             var exceedGauge = 0f;
             var exceedGaugeMax = 0f;
@@ -166,7 +169,7 @@ public static class DMC5DualSensePlugin
             SendState(character, true, hp, maxHp, motionBank, motionId, motionFrame,
                 exceedGauge, exceedGaugeMax, exceedStock, exceedRequest,
                 exceedRequestValue, blueRoseChargeLevel, blueRoseTimer, danteWeaponId,
-                triggerLeft, triggerRight);
+                attackLargeButton, special2Button, triggerLeft, triggerRight);
 
             if (_lastHp >= 0 && hp < _lastHp && maxHp > 0)
             {
@@ -201,6 +204,43 @@ public static class DMC5DualSensePlugin
         _lastHp = -1;
         _lastExceedStock = -1;
         _blueRoseCharging = false;
+    }
+
+    private static void ReadGameActionBindings(
+        out int attackLargeButton,
+        out int special2Button)
+    {
+        attackLargeButton = -1;
+        special2Button = -1;
+
+        try
+        {
+            var padManager = API.GetManagedSingleton("app.PadManager") as IObject;
+            var keyAssign = padManager?.Call("get_KeyAssign") as IObject;
+            if (keyAssign is null) return;
+
+            attackLargeButton = ToInt(keyAssign.Call(
+                "FindButton", app.PadInput.GameAction.AttackL));
+            special2Button = ToInt(keyAssign.Call(
+                "FindButton", app.PadInput.GameAction.Special2));
+
+            if (attackLargeButton != _lastAttackLargeButton ||
+                special2Button != _lastSpecial2Button)
+            {
+                _lastAttackLargeButton = attackLargeButton;
+                _lastSpecial2Button = special2Button;
+                LogInfo("Control bindings: AttackL=0x" +
+                        attackLargeButton.ToString("X", CultureInfo.InvariantCulture) +
+                        ", Special2=0x" +
+                        special2Button.ToString("X", CultureInfo.InvariantCulture) + ".");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogThrottled("Unable to read controller bindings: " + ex.Message);
+            attackLargeButton = -1;
+            special2Button = -1;
+        }
     }
 
     private static void InstallGameplayHooks()
@@ -731,6 +771,8 @@ public static class DMC5DualSensePlugin
         int blueRoseChargeLevel = 0,
         float blueRoseTimer = 0,
         int danteWeaponId = -1,
+        int attackLargeButton = -1,
+        int special2Button = -1,
         float triggerLeft = 0,
         float triggerRight = 0)
     {
@@ -748,6 +790,8 @@ public static class DMC5DualSensePlugin
              ",\"blueRoseChargeLevel\":" + blueRoseChargeLevel.ToString(CultureInfo.InvariantCulture) +
              ",\"blueRoseTimer\":" + F(blueRoseTimer) +
              ",\"danteWeaponId\":" + danteWeaponId.ToString(CultureInfo.InvariantCulture) +
+             ",\"attackLargeButton\":" + attackLargeButton.ToString(CultureInfo.InvariantCulture) +
+             ",\"special2Button\":" + special2Button.ToString(CultureInfo.InvariantCulture) +
              ",\"left\":" + F(triggerLeft) + ",\"right\":" + F(triggerRight) + "}");
     }
 

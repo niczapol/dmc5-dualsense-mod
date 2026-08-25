@@ -349,9 +349,34 @@ internal static class Program
                             message.BlueRoseChargeLevel,
                             message.BlueRoseTimer,
                             message.DanteWeaponId,
+                            message.AttackLargeButton,
+                            message.Special2Button,
                             message.Left,
                             message.Right,
                             DateTime.UtcNow);
+                    }
+
+                    var mappingsBefore = (
+                        AdaptiveTriggers.ExceedMapping,
+                        AdaptiveTriggers.NeroAttackLargeMapping,
+                        AdaptiveTriggers.DanteAttackLargeMapping);
+                    AdaptiveTriggers.UpdateBindings(
+                        message.Character,
+                        message.AttackLargeButton,
+                        message.Special2Button);
+                    var mappingsAfter = (
+                        AdaptiveTriggers.ExceedMapping,
+                        AdaptiveTriggers.NeroAttackLargeMapping,
+                        AdaptiveTriggers.DanteAttackLargeMapping);
+
+                    if (mappingsAfter != mappingsBefore)
+                    {
+                        log($"Adaptive mapping read from DMC5 controls: " +
+                            $"Exceed={mappingsAfter.Item1}, " +
+                            $"NeroAttackL={mappingsAfter.Item2}, " +
+                            $"DanteAttackL={mappingsAfter.Item3}, " +
+                            $"AttackLButton=0x{message.AttackLargeButton:X}, " +
+                            $"Special2Button=0x{message.Special2Button:X}.");
                     }
 
                     if (!message.Character.Equals(lastCharacter, StringComparison.OrdinalIgnoreCase))
@@ -387,19 +412,6 @@ internal static class Program
                     Increment(events, message.Name);
                     GameState latestState;
                     lock (StateGate) latestState = _state;
-                    var input = new XInputSnapshot(
-                        true,
-                        Math.Clamp(message.Left > 0 ? message.Left : latestState.TriggerLeft, 0f, 1f),
-                        Math.Clamp(message.Right > 0 ? message.Right : latestState.TriggerRight, 0f, 1f));
-                    var mappingsBefore = (
-                        AdaptiveTriggers.ExceedMapping,
-                        AdaptiveTriggers.NeroAttackLargeMapping,
-                        AdaptiveTriggers.DanteAttackLargeMapping);
-                    AdaptiveTriggers.OnEvent(message.Name, input);
-                    var mappingsAfter = (
-                        AdaptiveTriggers.ExceedMapping,
-                        AdaptiveTriggers.NeroAttackLargeMapping,
-                        AdaptiveTriggers.DanteAttackLargeMapping);
 
                     if (message.Name.Equals("weapon_hit", StringComparison.OrdinalIgnoreCase) &&
                         config.AdaptiveProfile.Equals("Enhanced", StringComparison.OrdinalIgnoreCase))
@@ -412,14 +424,6 @@ internal static class Program
                              haptics.PlayOriginal(message.Name))
                         Increment(originalHaptics, message.Name);
 
-                    if (mappingsAfter != mappingsBefore)
-                    {
-                        log($"Adaptive mapping changed after {message.Name}: " +
-                            $"Exceed={mappingsAfter.Item1}, " +
-                            $"NeroAttackL={mappingsAfter.Item2}, " +
-                            $"DanteAttackL={mappingsAfter.Item3}, " +
-                            $"LT={input.LeftTrigger:0.00}, RT={input.RightTrigger:0.00}.");
-                    }
                     break;
 
                 case "shutdown":

@@ -72,6 +72,12 @@ internal sealed class BridgeMessage
 
     [JsonPropertyName("danteWeaponId")]
     public int DanteWeaponId { get; set; } = -1;
+
+    [JsonPropertyName("attackLargeButton")]
+    public int AttackLargeButton { get; set; } = -1;
+
+    [JsonPropertyName("special2Button")]
+    public int Special2Button { get; set; } = -1;
 }
 
 internal sealed record GameState(
@@ -90,13 +96,15 @@ internal sealed record GameState(
     int BlueRoseChargeLevel,
     float BlueRoseTimer,
     int DanteWeaponId,
+    int AttackLargeButton,
+    int Special2Button,
     float TriggerLeft,
     float TriggerRight,
     DateTime LastSeenUtc)
 {
     public static GameState Empty { get; } = new(
         "unknown", false, 0, 0, 0, 0, 0,
-        0, 0, 0, false, 0, 0, 0, -1, 0, 0, DateTime.MinValue);
+        0, 0, 0, false, 0, 0, 0, -1, -1, -1, 0, 0, DateTime.MinValue);
 
     public bool IsFresh => DateTime.UtcNow - LastSeenUtc < TimeSpan.FromSeconds(2);
     public float HealthRatio => MaxHealth > 0 ? Math.Clamp(Health / MaxHealth, 0f, 1f) : 1f;

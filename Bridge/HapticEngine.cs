@@ -15,6 +15,9 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
     private readonly float _strength;
     private WasapiOut? _output;
     private MMDevice? _audioDevice;
+    private float? _previousEndpointVolume;
+    private bool? _previousEndpointMute;
+    private float? _managedEndpointVolume;
     private string _status = "disabled";
     private float _continuousLow;
     private float _continuousHigh;
@@ -61,7 +64,10 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
                 sample.Interleaved.Max(value => Math.Abs(value))))
             .ToArray();
 
-    public bool Start(string deviceNameFragment)
+    public bool Start(
+        string deviceNameFragment,
+        bool ensureEndpointAudible,
+        float endpointVolume)
     {
         if (_output is not null) return true;
 
@@ -79,10 +85,14 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
                 return false;
             }
 
+            var volumeStatus = ConfigureEndpointVolume(
+                ensureEndpointAudible,
+                endpointVolume);
             _output = new WasapiOut(_audioDevice, AudioClientShareMode.Shared, true, 20);
             _output.Init(this);
             _output.Play();
-            _status = $"{_audioDevice.FriendlyName}; {_samples.Count}/12 original PS5 samples";
+            _status = $"{_audioDevice.FriendlyName}; {volumeStatus}; " +
+                      $"{_samples.Count}/12 original PS5 samples";
             return true;
         }
         catch (Exception ex)
@@ -90,9 +100,62 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             _status = ex.Message;
             _output?.Dispose();
             _output = null;
+            RestoreEndpointVolume();
             _audioDevice?.Dispose();
             _audioDevice = null;
             return false;
+        }
+    }
+
+    private string ConfigureEndpointVolume(bool ensureAudible, float endpointVolume)
+    {
+        if (_audioDevice is null) return "endpoint unavailable";
+
+        var endpoint = _audioDevice.AudioEndpointVolume;
+        var originalVolume = endpoint.MasterVolumeLevelScalar;
+        var originalMute = endpoint.Mute;
+        if (!ensureAudible)
+            return $"endpoint volume {originalVolume:P0}, mute={originalMute}";
+
+        var target = Math.Clamp(endpointVolume, 0.05f, 1f);
+        _previousEndpointVolume = originalVolume;
+        _previousEndpointMute = originalMute;
+        endpoint.Mute = false;
+        endpoint.MasterVolumeLevelScalar = target;
+        _managedEndpointVolume = target;
+        return $"endpoint volume {originalVolume:P0}->{target:P0} for this session, " +
+               $"mute={originalMute}->False";
+    }
+
+    private void RestoreEndpointVolume()
+    {
+        if (_audioDevice is null ||
+            _previousEndpointVolume is null ||
+            _previousEndpointMute is null ||
+            _managedEndpointVolume is null)
+            return;
+
+        try
+        {
+            var endpoint = _audioDevice.AudioEndpointVolume;
+            // Restore only if the endpoint still has the exact state applied by
+            // this session. A deliberate user change while DMC5 is running wins.
+            if (!endpoint.Mute &&
+                Math.Abs(endpoint.MasterVolumeLevelScalar - _managedEndpointVolume.Value) < 0.01f)
+            {
+                endpoint.MasterVolumeLevelScalar = _previousEndpointVolume.Value;
+                endpoint.Mute = _previousEndpointMute.Value;
+            }
+        }
+        catch
+        {
+            // Endpoint removal during USB disconnect is a normal shutdown case.
+        }
+        finally
+        {
+            _previousEndpointVolume = null;
+            _previousEndpointMute = null;
+            _managedEndpointVolume = null;
         }
     }
 
@@ -547,7 +610,10 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
     {
         _output?.Stop();
         _output?.Dispose();
+        _output = null;
+        RestoreEndpointVolume();
         _audioDevice?.Dispose();
+        _audioDevice = null;
     }
 
     private readonly record struct SampleSpec(

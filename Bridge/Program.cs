@@ -63,7 +63,10 @@ internal static class Program
         var audioStarted = false;
         if (config.EnableAdvancedHaptics)
         {
-            audioStarted = haptics.Start(config.AudioDeviceContains);
+            audioStarted = haptics.Start(
+                config.AudioDeviceContains,
+                config.EnsureHapticsEndpointAudible,
+                config.HapticsEndpointVolume);
             Log(audioStarted
                 ? $"Advanced haptics audio: {haptics.Status}"
                 : $"Advanced haptics unavailable: {haptics.Status}");
@@ -503,7 +506,10 @@ internal static class Program
                 DateTime.UtcNow >= nextAudioRetryUtc)
             {
                 nextAudioRetryUtc = DateTime.UtcNow.AddSeconds(1);
-                audioReady = haptics.Start(config.AudioDeviceContains);
+                audioReady = haptics.Start(
+                    config.AudioDeviceContains,
+                    config.EnsureHapticsEndpointAudible,
+                    config.HapticsEndpointVolume);
             }
 
             var statusChanged = connected != wasConnected || audioReady != wasAudioReady;

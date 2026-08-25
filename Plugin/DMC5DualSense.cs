@@ -80,9 +80,11 @@ public static class DMC5DualSensePlugin
         try
         {
             var manager = API.GetManagedSingleton("app.PlayerManager") as IObject;
-            var player = manager is null
-                ? null
-                : GetFieldIfPresent(manager, "manualPlayer") as IObject;
+            // manualPlayer, hp and maxHp are inherited runtime fields. REFramework's
+            // TypeDefinition.Fields enumeration does not include them consistently,
+            // although direct GetField access does. Enumerating first caused every
+            // live player to be reported as missing and disabled adaptive triggers.
+            var player = manager?.GetField("manualPlayer") as IObject;
 
             if (player is null)
             {
@@ -105,8 +107,8 @@ public static class DMC5DualSensePlugin
                 _playerTypeDumped = true;
             }
 
-            var hp = ToSingle(GetFieldIfPresent(player, "hp"));
-            var maxHp = ToSingle(GetFieldIfPresent(player, "maxHp"));
+            var hp = ToSingle(player.GetField("hp"));
+            var maxHp = ToSingle(player.GetField("maxHp"));
             ReadMotion(player, out var motionBank, out var motionId, out var motionFrame);
             ReadGamePad(out var triggerLeft, out var triggerRight);
 
@@ -202,16 +204,11 @@ public static class DMC5DualSensePlugin
             "setMotorPower(via.hid.GamePadMotor, System.Single)", OnMotorPower,
             "RE Engine motor output");
 
-        var shakeMethod = tdb.GetType("app.PadShake")?.GetMethod("requestShake()");
-        if (shakeMethod is not null)
-        {
-            var hook = shakeMethod.AddHook(false);
-            hook.AddPre(OnPadShake);
-            _hooks.Add(hook);
-            LogInfo("PadShake haptics hook installed.");
-        }
-        else LogError("app.PadShake.requestShake() was not found.");
-        LogMethodCandidates(tdb, "app.PadShake", "requestShake");
+        // setMotorPower below is the final authoritative output path for PadShake
+        // and all other ordinary PC rumble. Calling guessed PadShake accessors here
+        // generated thousands of REFramework "method not found" messages without
+        // producing a usable packet, so the redundant high-level hook is omitted.
+        LogInfo("Ordinary rumble is captured at via.hid.GamePadDevice.setMotorPower.");
 
         InstallPreHook(tdb, "app.PlayerNero", "set_exceedReqTrigger(System.Boolean)", OnExceedInput,
             "Nero Exceed input");
@@ -326,38 +323,6 @@ public static class DMC5DualSensePlugin
         {
             LogThrottled("Method candidate dump error: " + ex.Message);
         }
-    }
-
-    private static PreHookResult OnPadShake(Span<ulong> args)
-    {
-        try
-        {
-            if (args.Length < 2) return PreHookResult.Continue;
-            var shake = ManagedObject.ToManagedObject(args[1]) as IObject;
-            if (shake is null) return PreHookResult.Continue;
-
-            var name = Convert.ToString(shake.Call("get_Name"), CultureInfo.InvariantCulture) ?? "";
-            var motor = ToInt(shake.Call("get_Motor"));
-            var power = Math.Clamp(ToSingle(shake.Call("get_Power")), 0f, 1f);
-            var frames = Math.Max(0f, ToSingle(shake.Call("get_ShakeFrame")));
-            var duration = Math.Clamp(frames / 60f, 0.025f, 2.5f);
-
-            if (_enableCalibrationLog && power > 0)
-                LogPadShake(name, motor, power, frames, _lastCharacter);
-
-            if (motor is >= 1 and <= 3 && power > 0)
-            {
-                Send("{\"v\":1,\"type\":\"padshake\",\"name\":\"" + Escape(name) +
-                     "\",\"motor\":" + motor.ToString(CultureInfo.InvariantCulture) +
-                     ",\"value\":" + F(power) + ",\"duration\":" + F(duration) + "}");
-            }
-        }
-        catch (Exception ex)
-        {
-            LogThrottled("PadShake hook error: " + ex.Message);
-        }
-
-        return PreHookResult.Continue;
     }
 
     private static PreHookResult OnMotorPower(Span<ulong> args)
@@ -811,21 +776,6 @@ public static class DMC5DualSensePlugin
                 chargeLevel.ToString(CultureInfo.InvariantCulture) + "," + F(blueRoseTimer) + "," +
                 bank.ToString(CultureInfo.InvariantCulture) + "," +
                 motion.ToString(CultureInfo.InvariantCulture) + "," + F(frame) + "\r\n");
-        }
-        catch { }
-    }
-
-    private static void LogPadShake(string name, int motor, float power, float frames, string character)
-    {
-        try
-        {
-            var path = Path.Combine(_baseDirectory, "padshake.csv");
-            if (!File.Exists(path))
-                File.AppendAllText(path, "utc,character,name,motor,power,frames\r\n");
-            File.AppendAllText(path,
-                DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) + "," +
-                EscapeCsv(character) + "," + EscapeCsv(name) + "," +
-                motor.ToString(CultureInfo.InvariantCulture) + "," + F(power) + "," + F(frames) + "\r\n");
         }
         catch { }
     }

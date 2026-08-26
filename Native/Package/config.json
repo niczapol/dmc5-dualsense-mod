@@ -1,0 +1,14 @@
+{
+  "Port": 27105,
+  "AdaptiveProfile": "Authentic",
+  "TriggerStrength": 1.0,
+  "HapticsStrength": 1.0,
+  "LightbarStrength": 1.0,
+  "EnableAdaptiveTriggers": true,
+  "EnableAdvancedHaptics": true,
+  "EnableLightbar": true,
+  "EnableCalibrationLog": false,
+  "AudioDeviceContains": "DualSense Wireless Controller",
+  "EnsureHapticsEndpointAudible": true,
+  "HapticsEndpointVolume": 1.0
+}

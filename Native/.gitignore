@@ -1,0 +1,11 @@
+/bin/
+/bin-*/
+/repro-*/
+/package-build-*/
+/package-final-build-*/
+/package-test-*/
+/package-final-a/
+/package-final-b/
+/installer-smoke-*/
+/artifacts/
+/UI/

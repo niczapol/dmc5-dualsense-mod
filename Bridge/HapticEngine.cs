@@ -77,7 +77,7 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             _audioDevice = enumerator
                 .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
                 .FirstOrDefault(device =>
-                    device.FriendlyName.Contains(deviceNameFragment, StringComparison.OrdinalIgnoreCase));
+                    MatchesAudioEndpointName(device.FriendlyName, deviceNameFragment));
 
             if (_audioDevice is null)
             {
@@ -105,6 +105,22 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             _audioDevice = null;
             return false;
         }
+    }
+
+    internal static bool MatchesAudioEndpointName(
+        string friendlyName,
+        string configuredFragment)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredFragment) &&
+            friendlyName.Contains(configuredFragment, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Standard CFI-ZCT1/CFI-ZCT2 endpoints and DualSense Edge use the same
+        // product-family words, but Edge inserts its model name in the middle.
+        // Ignore the localized Windows prefix and avoid a revision-specific
+        // exact match.
+        return friendlyName.Contains("DualSense", StringComparison.OrdinalIgnoreCase) &&
+               friendlyName.Contains("Wireless Controller", StringComparison.OrdinalIgnoreCase);
     }
 
     private string ConfigureEndpointVolume(bool ensureAudible, float endpointVolume)

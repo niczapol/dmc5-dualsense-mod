@@ -2,6 +2,27 @@ using DMC5DualSense.Bridge;
 
 var failures = new List<string>();
 
+Run("localized CFI-ZCT1/CFI-ZCT2 audio endpoint is accepted", () =>
+{
+    Equal(true, HapticEngine.MatchesAudioEndpointName(
+        "Динамики (DualSense Wireless Controller)",
+        "DualSense Wireless Controller"));
+});
+
+Run("DualSense Edge audio endpoint is accepted by family name", () =>
+{
+    Equal(true, HapticEngine.MatchesAudioEndpointName(
+        "Speakers (DualSense Edge Wireless Controller)",
+        "DualSense Wireless Controller"));
+});
+
+Run("unrelated audio endpoint is rejected", () =>
+{
+    Equal(false, HapticEngine.MatchesAudioEndpointName(
+        "Speakers (Realtek(R) Audio)",
+        "DualSense Wireless Controller"));
+});
+
 Run("Dante face-button gun mapping keeps both triggers free", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();

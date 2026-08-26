@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.RegularExpressions;
 using ReeLib;
 using ReeLib.Clip;
 using ReeLib.Common;
@@ -44,8 +45,11 @@ internal static class Program
             // caps (centre plus rim), matching the visual coverage already used
             // by the smaller Void controller. These anchors are independent of
             // c_LS/c_RS below and are patched into both Settings timelines.
-            ["LStP"] = new(new(244.0f, 316.0f), new(112.0f, 120.0f)),
-            ["RStP"] = new(new(473.0f, 316.0f), new(112.0f, 120.0f)),
+            // The controller is drawn in perspective: the visible movable cap
+            // sits a little below and inward from the mechanical stick base.
+            // Cover that cap rather than the base centre used by the stock art.
+            ["LStP"] = new(new(243.0f, 321.0f), new(106.0f, 110.0f)),
+            ["RStP"] = new(new(476.0f, 321.0f), new(106.0f, 110.0f)),
             ["CenL"] = new(new(359.0f, 171.0f)),
             ["CenR"] = new(new(530.0f, 158.0f))
         };
@@ -82,6 +86,53 @@ internal static class Program
             ["c_CenR"] = new(new(212.0f, 66.0f), 10)
         };
 
+    // ui3109 is the pause-menu "Display Controls" diagram. Platform selection,
+    // character clips, keyboard/controller switching and show/hide state all use
+    // the original c_PS4/c_XB1 timelines. Never force one branch visible: doing
+    // so freezes the labels and leaves the overlay on screen. Instead, keep both
+    // timelines intact and calibrate the semantically equivalent endpoint in
+    // each branch against the accepted ui8013 controller artwork.
+    private static readonly IReadOnlyDictionary<string, Vector2> PauseConnectors =
+        new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["c_PS4_C"] = new(-1.0f, -20.0f),
+            ["c_PS4_L_top"] = new(-90.5f, -59.25f),
+            ["c_PS4_L_center"] = new(-90.8f, 2.75f),
+            ["c_PS4_L_center_2nd"] = new(-90.8f, 2.75f),
+            ["c_PS4_L_bottom"] = new(-46.0f, 39.5f),
+            ["c_PS4_R_top"] = new(88.5f, -59.25f),
+            ["c_PS4_R_center"] = new(89.5f, 2.125f),
+            ["c_PS4_R_bottom"] = new(45.5f, 39.5f),
+            ["c_XB1_C"] = new(-1.0f, -20.0f),
+            ["c_XB1_L_top"] = new(-90.5f, -59.25f),
+            ["c_XB1_L_center"] = new(-46.0f, 39.5f),
+            ["c_XB1_L_bottom"] = new(-90.8f, 2.75f),
+            ["c_XB1_L_bottom_2nd"] = new(-90.8f, 2.75f),
+            ["c_XB1_R_top"] = new(88.5f, -59.25f),
+            ["c_XB1_R_center"] = new(89.5f, 2.125f),
+            ["c_XB1_R_bottom"] = new(45.5f, 39.5f)
+        };
+
+    private static readonly Vector2 PauseOptionsTarget = new(68.0f, -26.0f);
+
+    // RE Engine rasterizes these rotated GUI rectangles without texture
+    // filtering. A sub-two-pixel strip exposes obvious stair steps on the
+    // pause diagram, whereas 2.25 px keeps the route crisp without making it
+    // visually heavier than the surrounding cyan panel rules.
+    private const float PauseConnectorThickness = 2.25f;
+
+    private static readonly IReadOnlyDictionary<string, (Guid Circle, Guid Line)>
+        PauseOptionsConnectorIds =
+            new Dictionary<string, (Guid Circle, Guid Line)>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["c_PS4_C"] = (
+                    Guid.Parse("78560ed2-5284-4ebd-ae91-bcd006d70910"),
+                    Guid.Parse("e24c039d-bf43-4f8a-b5ef-8dca2f3e7bbc")),
+                ["c_XB1_C"] = (
+                    Guid.Parse("60618106-3f64-47dd-b6b7-5962199e97bd"),
+                    Guid.Parse("fb4df65e-88d3-4453-bc7b-55aa32098f09"))
+            };
+
     private static int Main(string[] args)
     {
         try
@@ -92,26 +143,40 @@ internal static class Program
                 return Inspect(args[1], inspectAll: true);
             if (args.Length == 2 && args[0].Equals("inspect-uvs", StringComparison.OrdinalIgnoreCase))
                 return InspectUvs(args[1]);
+            if (args.Length == 2 && args[0].Equals("hash-path", StringComparison.OrdinalIgnoreCase))
+                return HashPath(args[1]);
+            if (args.Length == 5 && args[0].Equals("extract-pak", StringComparison.OrdinalIgnoreCase))
+                return ExtractPak(args[1], args[2], args[3], args[4]);
+            if (args.Length == 3 && args[0].Equals("scan-directory", StringComparison.OrdinalIgnoreCase))
+                return ScanDirectory(args[1], args[2]);
 
             if (args.Length != 3 ||
                 (!args[0].Equals("large", StringComparison.OrdinalIgnoreCase) &&
-                 !args[0].Equals("small", StringComparison.OrdinalIgnoreCase)))
+                 !args[0].Equals("small", StringComparison.OrdinalIgnoreCase) &&
+                 !args[0].Equals("pause", StringComparison.OrdinalIgnoreCase)))
             {
                 Console.Error.WriteLine(
                     "Usage:\n" +
-                    "  <large|small> <input.gui.*> <output.gui.*>\n" +
+                    "  <large|small|pause> <input.gui.*> <output.gui.*>\n" +
                     "  inspect <input.gui.*>\n" +
                     "  inspect-all <input.gui.*>\n" +
-                    "  inspect-uvs <input.uvs.*>");
+                    "  inspect-uvs <input.uvs.*>\n" +
+                    "  hash-path <natives-relative-path>\n" +
+                    "  scan-directory <input-directory> <name-regex>\n" +
+                    "  extract-pak <input.pak> <file-list> <path-regex> <output-directory>");
                 return 2;
             }
 
             using var gui = new GuiFile(new FileHandler(args[1]));
             if (!gui.Read()) throw new InvalidDataException("Failed to read GUI file.");
 
-            var changed = args[0].Equals("large", StringComparison.OrdinalIgnoreCase)
-                ? AlignLarge(gui)
-                : AlignSmall(gui);
+            var changed = args[0].ToLowerInvariant() switch
+            {
+                "large" => AlignLarge(gui),
+                "small" => AlignSmall(gui),
+                "pause" => AlignPause(gui),
+                _ => 0
+            };
             if (changed == 0) throw new InvalidDataException("No DualSense layout values were patched.");
 
             var output = Path.GetFullPath(args[2]);
@@ -125,6 +190,66 @@ internal static class Program
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static int HashPath(string path)
+    {
+        var hash = PakUtils.GetFilepathHash(path.Replace('\\', '/'));
+        Console.WriteLine($"0x{hash:X16} lower={(uint)hash} upper={(uint)(hash >> 32)}");
+        return 0;
+    }
+
+    private static int ScanDirectory(string inputDirectory, string namePattern)
+    {
+        var regex = new Regex(namePattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var matchedFiles = 0;
+        foreach (var path in Directory.EnumerateFiles(
+                     Path.GetFullPath(inputDirectory), "*.gui.*", SearchOption.AllDirectories))
+        {
+            using var gui = new GuiFile(new FileHandler(path));
+            if (!gui.Read()) continue;
+
+            var matches = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var container in gui.Containers)
+            {
+                if (regex.IsMatch(container.Info.Name)) matches.Add("container:" + container.Info.Name);
+                foreach (var clip in container.Clips)
+                    if (regex.IsMatch(clip.name)) matches.Add("clip:" + clip.name);
+            }
+            if (gui.RootView is not null) CollectDisplayNames(gui.RootView, regex, matches);
+            foreach (var attribute in gui.AttributeOverrides)
+                if (regex.IsMatch(attribute.TargetPath)) matches.Add("override:" + attribute.TargetPath);
+
+            if (matches.Count == 0) continue;
+            matchedFiles++;
+            Console.WriteLine(Path.GetRelativePath(inputDirectory, path));
+            foreach (var match in matches) Console.WriteLine("  " + match);
+        }
+        Console.WriteLine($"Matched {matchedFiles} GUI files.");
+        return matchedFiles == 0 ? 4 : 0;
+    }
+
+    private static void CollectDisplayNames(DisplayElement display, Regex regex, ISet<string> matches)
+    {
+        if (regex.IsMatch(display.Element.Name)) matches.Add("display:" + display.Element.Name);
+        foreach (var child in display.Children) CollectDisplayNames(child, regex, matches);
+    }
+
+    private static int ExtractPak(string pakPath, string listPath, string pathPattern, string outputDirectory)
+    {
+        var reader = new PakReader
+        {
+            EnableConsoleLogging = true,
+            Filter = new Regex(pathPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+        };
+        reader.PakFilePriority.Add(Path.GetFullPath(pakPath));
+        reader.AddFilesFromListFile(Path.GetFullPath(listPath));
+
+        var missing = new List<string>();
+        var count = reader.UnpackFilesTo(Path.GetFullPath(outputDirectory), missing);
+        Console.WriteLine($"Extracted {count} matching PAK files; missing {missing.Count}.");
+        foreach (var path in missing) Console.WriteLine($"MISSING {path}");
+        return missing.Count == 0 ? 0 : 3;
     }
 
     private static int InspectUvs(string path)
@@ -339,6 +464,158 @@ internal static class Program
         return changed;
     }
 
+    private static int AlignPause(GuiFile gui)
+    {
+        if (gui.RootView is null) throw new InvalidDataException("GUI root view was not found.");
+
+        var ps4 = FindDisplay(gui.RootView, "c_PS4") ??
+                  throw new InvalidDataException("c_PS4 display was not found in the pause diagram.");
+        var xbox = FindDisplay(gui.RootView, "c_XB1") ??
+                   throw new InvalidDataException("c_XB1 display was not found in the pause diagram.");
+
+        var changed = 0;
+        // Both controller cells contain the same DualSense artwork in the
+        // shipped atlas, but pattern 1 intentionally adds a cyan outer outline.
+        // Keep only the clean pattern 0 artwork and remove the old separate
+        // stick-cap textures: the DualSense image already contains both sticks.
+        foreach (var root in new[] { ps4, xbox })
+        {
+            var gamepad = FindDisplay(root, "t_gamepad");
+            if (gamepad is not null)
+            {
+                changed += SetPosition(gamepad.Element.Attributes, Vector2.Zero);
+                changed += SetSize(gamepad.Element.Attributes, new ReeLib.via.Size { w = 288.0f, h = 184.0f });
+                changed += SetUInt32(gamepad.Element.Attributes, "UVPatternNo", 0);
+            }
+            foreach (var stickName in new[] { "t_LS", "t_RS" })
+            {
+                var stick = FindDisplay(root, stickName);
+                if (stick is not null) changed += SetBoolean(stick.Element.Attributes, "Visible", false);
+            }
+        }
+
+        foreach (var pair in PauseConnectors)
+        {
+            var branch = pair.Key.StartsWith("c_PS4_", StringComparison.OrdinalIgnoreCase)
+                ? ps4
+                : xbox;
+            var panel = FindDisplay(branch, pair.Key);
+            if (panel is null) throw new InvalidDataException($"Pause connector panel {pair.Key} was not found.");
+            changed += AlignConnector(panel, pair.Value);
+        }
+
+        // The stock central panel combines Back/Provoke and Start/Pause behind
+        // one line. Keep the original touchpad line and add an independent line
+        // to the physical Options button for Pause. Both lines remain children
+        // of the branch panel, so the game's own visibility timeline owns them.
+        foreach (var pair in new[]
+                 {
+                     (Root: ps4, Name: "c_PS4_C"),
+                     (Root: xbox, Name: "c_XB1_C")
+                 })
+        {
+            var panel = FindDisplay(pair.Root, pair.Name) ??
+                        throw new InvalidDataException($"Pause central panel {pair.Name} was not found.");
+            changed += AddOptionsConnector(panel, PauseOptionsTarget);
+        }
+        return changed;
+    }
+
+    private static int AddOptionsConnector(DisplayElement panel, Vector2 target)
+    {
+        if (panel.Container is null)
+            throw new InvalidDataException($"Panel {panel.Element.Name} has no child container.");
+
+        var sourceCircle = FindDisplay(panel, "circle") ??
+                           throw new InvalidDataException($"Panel {panel.Element.Name} has no endpoint circle.");
+        var sourceLine = FindDisplay(panel, "r_link_line") ??
+                         throw new InvalidDataException($"Panel {panel.Element.Name} has no link line.");
+        if (!PauseOptionsConnectorIds.TryGetValue(panel.Element.Name, out var ids))
+            throw new InvalidDataException($"No deterministic IDs for {panel.Element.Name}.");
+
+        var existingCircle = FindDisplay(panel, "circle_options");
+        var existingLine = FindDisplay(panel, "r_link_line_options");
+        var circleElement = existingCircle?.Element ?? sourceCircle.Element.DeepClone<Element>()!;
+        var lineElement = existingLine?.Element ?? sourceLine.Element.DeepClone<Element>()!;
+        var added = 0;
+        if (existingCircle is null)
+        {
+            circleElement.ID = new GuiObjectID(ids.Circle);
+            circleElement.Name = "circle_options";
+            SetString(circleElement.Attributes, "Name", "circle_options");
+            panel.Container.Elements.Add(circleElement);
+            added++;
+        }
+        if (existingLine is null)
+        {
+            lineElement.ID = new GuiObjectID(ids.Line);
+            lineElement.Name = "r_link_line_options";
+            SetString(lineElement.Attributes, "Name", "r_link_line_options");
+            panel.Container.Elements.Add(lineElement);
+            added++;
+        }
+
+        var circle = new DisplayElement(circleElement, null);
+        var line = new DisplayElement(lineElement, null);
+        // Start below the Pause/Options half of the central text panel instead
+        // of stacking both routes on its centre.
+        var changed = SetPosition(line.Element.Attributes, new Vector2(50.0f, 2.0f));
+        changed += AlignConnector(panel, target, circle, line);
+        return changed + added;
+    }
+
+    private static int AlignConnector(DisplayElement panel, Vector2 target)
+    {
+        var circle = FindDisplay(panel, "circle") ??
+                     throw new InvalidDataException($"Panel {panel.Element.Name} has no endpoint circle.");
+        var line = FindDisplay(panel, "r_link_line") ??
+                   throw new InvalidDataException($"Panel {panel.Element.Name} has no link line.");
+        return AlignConnector(panel, target, circle, line);
+    }
+
+    private static int AlignConnector(
+        DisplayElement panel,
+        Vector2 target,
+        DisplayElement circle,
+        DisplayElement line)
+    {
+        var panelPosition = GetVector3(panel.Element.Attributes, "Position") ??
+                            throw new InvalidDataException($"Panel {panel.Element.Name} has no Position.");
+        var localTarget = target - new Vector2(panelPosition.X, panelPosition.Y);
+        var linePosition = GetVector3(line.Element.Attributes, "Position") ??
+                           throw new InvalidDataException($"Panel {panel.Element.Name} link has no Position.");
+        var lineSize = GetSize(line.Element.Attributes, "Size") ??
+                       throw new InvalidDataException($"Panel {panel.Element.Name} link has no Size.");
+
+        var start = new Vector2(linePosition.X, linePosition.Y);
+        var delta = localTarget - start;
+        var length = MathF.Max(1.5f, delta.Length());
+        var changed = SetPosition(circle.Element.Attributes, localTarget);
+        if (lineSize.w <= lineSize.h)
+        {
+            var rotation = -MathF.Atan2(delta.X, delta.Y) * 180.0f / MathF.PI;
+            changed += SetSize(line.Element.Attributes, new ReeLib.via.Size
+            {
+                w = PauseConnectorThickness,
+                h = length
+            });
+            changed += SetRotationZ(line.Element.Attributes, rotation);
+        }
+        else
+        {
+            var rotation = delta.X >= 0.0f
+                ? MathF.Atan2(delta.Y, delta.X) * 180.0f / MathF.PI
+                : MathF.Atan2(-delta.Y, -delta.X) * 180.0f / MathF.PI;
+            changed += SetSize(line.Element.Attributes, new ReeLib.via.Size
+            {
+                w = length,
+                h = PauseConnectorThickness
+            });
+            changed += SetRotationZ(line.Element.Attributes, rotation);
+        }
+        return changed;
+    }
+
     private static int SetBoolean(
         List<ReeLib.Gui.Attribute> attributes,
         string name,
@@ -349,6 +626,59 @@ internal static class Program
         if (attribute is null) return 0;
         attribute.Value = value;
         return 1;
+    }
+
+    private static int SetUInt32(List<ReeLib.Gui.Attribute> attributes, string name, uint value)
+    {
+        var attribute = attributes.FirstOrDefault(item =>
+            item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (attribute is null) return 0;
+        attribute.Value = value;
+        return 1;
+    }
+
+    private static int SetString(
+        List<ReeLib.Gui.Attribute> attributes,
+        string name,
+        string value)
+    {
+        var attribute = attributes.FirstOrDefault(item =>
+            item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (attribute is null) return 0;
+        attribute.Value = value;
+        return 1;
+    }
+
+    private static int SetSize(List<ReeLib.Gui.Attribute> attributes, ReeLib.via.Size value)
+    {
+        var attribute = attributes.FirstOrDefault(item =>
+            item.Name.Equals("Size", StringComparison.OrdinalIgnoreCase));
+        if (attribute is null) return 0;
+        attribute.Value = value;
+        return 1;
+    }
+
+    private static int SetRotationZ(List<ReeLib.Gui.Attribute> attributes, float value)
+    {
+        var attribute = attributes.FirstOrDefault(item =>
+            item.Name.Equals("Rotation", StringComparison.OrdinalIgnoreCase));
+        if (attribute?.Value is not Vector3 current) return 0;
+        attribute.Value = new Vector3(current.X, current.Y, value);
+        return 1;
+    }
+
+    private static Vector3? GetVector3(List<ReeLib.Gui.Attribute> attributes, string name)
+    {
+        var attribute = attributes.FirstOrDefault(item =>
+            item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return attribute?.Value is Vector3 value ? value : null;
+    }
+
+    private static ReeLib.via.Size? GetSize(List<ReeLib.Gui.Attribute> attributes, string name)
+    {
+        var attribute = attributes.FirstOrDefault(item =>
+            item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return attribute?.Value is ReeLib.via.Size value ? value : null;
     }
 
     private static int SetOverride(

@@ -253,6 +253,7 @@ foreach ($required in @(
     (Join-Path $PSScriptRoot 'NOTICE.txt'),
     (Join-Path $PSScriptRoot 'BUILD_INFO.txt'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui0000\tex\ui0010_iam.tex.11.x64'),
+    (Join-Path $uiRoot 'natives\x64\ui\gui\ui3100\gui\ui3109.gui.270020'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui4000\gui\ui4002.gui.270020'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui4000\tex\ui4002_00_iam.tex.11'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui8000\gui\ui8013.gui.270020'),
@@ -390,12 +391,17 @@ try {
     }
 
     # RE Engine prefers a matching entry in re_chunk_000.pak over a loose file.
-    # The older prompt mod had invalidated only its three TEX files, so the two
-    # new GUI layouts must be invalidated as well. Only their 8-byte hash pairs
+    # The older prompt mod had invalidated only its three TEX files, so the three
+    # GUI layouts must be invalidated as well. Only their 8-byte hash pairs
     # in the TOC are changed; payload data remains untouched and is restored by
     # the uninstaller from the exact values stored in the manifest.
     $pakPath = Join-Path $resolvedGameDir 're_chunk_000.pak'
     $pakTargets = @(
+        [pscustomobject]@{
+            Path = 'natives/x64/ui/gui/ui3100/gui/ui3109.gui.270020'
+            Lower = [uint32]3412546084
+            Upper = [uint32]3766842389
+        },
         [pscustomobject]@{
             Path = 'natives/x64/ui/gui/ui4000/gui/ui4002.gui.270020'
             Lower = [uint32]1604417987

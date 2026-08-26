@@ -12,12 +12,6 @@
       "Url": "https://github.com/praydog/REFramework-nightly/releases/download/nightly-01397-684ca77369ec1050e844e8651a9b1d5b7c5aa370/csharp-api.zip",
       "Size": 5119006,
       "Sha256": "260CB40A8D422F494783D48CAC0FDBEB62496F54FC238ED7DB782F0E47847140"
-    },
-    {
-      "Name": "ViGEmBus_1.22.0_x64_x86_arm64.exe",
-      "Url": "https://github.com/nefarius/ViGEmBus/releases/download/v1.22.0/ViGEmBus_1.22.0_x64_x86_arm64.exe",
-      "Size": 6278576,
-      "Sha256": "89220A7865076B342892F98865F3499FB7C4CFD673159E89D352C360FD014C6A"
     }
   ],
   "Haptics": [
@@ -43,17 +37,17 @@
     {
       "Path": "natives/x64/ui/gui/ui4000/gui/ui4002.gui.270020",
       "Size": 392916,
-      "Sha256": "88D6068D9CC65721DFDB0189262669D0CD0AED212D783B3B51BF1297DF589DF3"
+      "Sha256": "BA901B6F11D577536D043C6D971ABE652F3D678D0BB3B432695A0046ECBF72A9"
     },
     {
       "Path": "natives/x64/ui/gui/ui4000/tex/ui4002_00_iam.tex.11",
       "Size": 1048624,
-      "Sha256": "9ED1BEFEE6AF568FF2DFBE9198EDA87ED2CAD7D87C40D11F9BEFA311008CE86D"
+      "Sha256": "AD71CB50572CFD39DFE02165A24637582704ECF09D917F65E21A2CEB9CD50F99"
     },
     {
       "Path": "natives/x64/ui/gui/ui8000/gui/ui8013.gui.270020",
-      "Size": 155698,
-      "Sha256": "87667F071213B690FF78339DE0D64D3555D10040E3BD21BE2490A7634BCB72D5"
+      "Size": 156206,
+      "Sha256": "CD9E0891398AE607E1F8465C0037A3A7EE3DD03F63A2693D3D2287B5C59E89B7"
     },
     {
       "Path": "natives/x64/ui/gui/ui8000/tex/ui8013_iam.tex.11",

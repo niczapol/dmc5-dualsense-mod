@@ -27,7 +27,7 @@ public static class DMC5DualSensePlugin
     private static uint _lastMotionId = uint.MaxValue;
     private static string _lastCharacter = "unknown";
     private static string _baseDirectory = "";
-    private static bool _enableCalibrationLog = true;
+    private static bool _enableCalibrationLog;
     private static bool _playerTypeDumped;
     private static DateTime _lastActEventUtc = DateTime.MinValue;
     private static DateTime _lastWeaponHitUtc = DateTime.MinValue;
@@ -116,7 +116,7 @@ public static class DMC5DualSensePlugin
             _nextMissingPlayerPollUtc = DateTime.MinValue;
             SetActivePlayer(player, character);
 
-            if (!_playerTypeDumped)
+            if (_enableCalibrationLog && !_playerTypeDumped)
             {
                 DumpTypeHierarchy(player);
                 _playerTypeDumped = true;
@@ -350,7 +350,8 @@ public static class DMC5DualSensePlugin
         InstallPreHook(tdb, "app.player.ExceedGauge",
             "addStock(System.Int32, System.Boolean, System.Boolean)", OnExceedStockAdded,
             "Nero EX/MAX-Act stock");
-        LogMethodCandidates(tdb, "app.player.ExceedGauge", "stock");
+        if (_enableCalibrationLog)
+            LogMethodCandidates(tdb, "app.player.ExceedGauge", "stock");
         InstallPreHook(tdb, "app.PlayerNero", "onBlueRoseChargeStart()", OnGunChargeStart,
             "Blue Rose charge start");
         InstallPreHook(tdb, "app.PlayerNero", "onBlueRoseChargeLevelUp()", OnGunChargeLevel,
@@ -366,8 +367,11 @@ public static class DMC5DualSensePlugin
             "Dante firearm HD haptics");
         InstallPreHook(tdb, "app.PlayerDante", "set_isEbonyShot(System.Boolean)",
             OnDanteEbonyShotSelected, "Dante Ebony/Ivory selector");
-        LogMethodCandidates(tdb, "app.PlayerDante", "shot");
-        LogMethodCandidates(tdb, "app.PlayerDante", "shell");
+        if (_enableCalibrationLog)
+        {
+            LogMethodCandidates(tdb, "app.PlayerDante", "shot");
+            LogMethodCandidates(tdb, "app.PlayerDante", "shell");
+        }
         InstallPreHook(tdb, "app.PlayerVergilPL", "onChargeCompleteJudgementCut()", OnJudgementCut,
             "Vergil Judgment Cut");
         InstallPreHook(tdb, "app.PlayerVergilPL", "finishJudgementCutEnd()", OnJudgementCutEnd,
@@ -712,8 +716,11 @@ public static class DMC5DualSensePlugin
     private static void SendEvent(string name, float value = 0f)
     {
         ReadGamePad(out var triggerLeft, out var triggerRight);
-        WriteRuntimeLog("event " + name + " value=" + F(value) +
-                        " left=" + F(triggerLeft) + " right=" + F(triggerRight));
+        if (_enableCalibrationLog)
+        {
+            WriteRuntimeLog("event " + name + " value=" + F(value) +
+                            " left=" + F(triggerLeft) + " right=" + F(triggerRight));
+        }
         Send("{\"v\":1,\"type\":\"event\",\"name\":\"" + Escape(name) +
              "\",\"value\":" + F(value) +
              ",\"left\":" + F(triggerLeft) + ",\"right\":" + F(triggerRight) + "}");
@@ -915,11 +922,11 @@ public static class DMC5DualSensePlugin
         {
             var config = File.ReadAllText(Path.Combine(_baseDirectory, "config.json"));
             var key = config.IndexOf("EnableCalibrationLog", StringComparison.OrdinalIgnoreCase);
-            if (key < 0) return true;
+            if (key < 0) return false;
             var tail = config.Substring(key, Math.Min(80, config.Length - key));
-            return !tail.Contains("false", StringComparison.OrdinalIgnoreCase);
+            return tail.Contains("true", StringComparison.OrdinalIgnoreCase);
         }
-        catch { return true; }
+        catch { return false; }
     }
 
     private static void LogMotion(

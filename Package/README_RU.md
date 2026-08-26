@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.5.4 Authentic
+# DMC5 DualSense Layer 1.5.5 Authentic
 
 Локальный пакет полной поддержки Sony DualSense CFI-ZCT1W для Steam-версии
 Devil May Cry 5 на Windows. Он добавляет адаптивные курки, HD-вибрацию,
@@ -22,27 +22,25 @@ Devil May Cry 5 на Windows. Он добавляет адаптивные ку�
   тачпада и Options совпадают с видимыми органами управления;
 - чёткие и правильно расположенные иконки всех основных кнопок DualSense.
 
-Steam Input для DMC5 должен быть отключён. В прежней схеме он посылал игре
-XInput, но одновременно перезаписывал HID-выход DualSense, из-за чего курки и вибрация
-могли полностью исчезать. Теперь bridge читает физический DualSense напрямую и атомарно
-передаёт его полное состояние в виртуальный Xbox 360 контроллер через ViGEmBus. DMC5 получает
-обычный XInput, а bridge остаётся единственным источником физического отклика.
+Steam Input для DMC5 должен быть включён либо оставлен в режиме «Использовать настройки
+по умолчанию». Он штатно передаёт игре кнопки, стики и тачпад. Bridge не перехватывает
+физический ввод и не создаёт виртуальный контроллер: через Steam Input он отправляет
+только адаптивные курки, цвет подсветки и обычную вибрацию, а расширенную тактильную
+отдачу воспроизводит через четырёхканальный аудиовыход DualSense.
 
 ## Штатный запуск через Steam
 
 1. Подключите DualSense USB-кабелем.
 2. Закройте PlayStation Accessories, DS4Windows и DualSenseX.
-3. В Steam откройте `DMC5 -> Свойства -> Контроллер` и выберите
-   `Отключить систему ввода Steam`.
+3. В Steam откройте `DMC5 -> Свойства -> Контроллер` и оставьте Steam Input
+   включённым либо выберите `Использовать настройки по умолчанию`.
 4. Один раз откройте свойства DMC5 в Steam и вставьте в «Параметры запуска» строку,
    которую напечатал установщик.
 5. После этого запускайте игру обычной кнопкой «Играть» в Steam.
 
-Steam-launcher открывает вход и выход физического DualSense только на время DMC5,
-создаёт виртуальный Xbox 360 контроллер и перед запуском игры подтверждает все четыре
-тракта: HID-выход, четырёхканальный haptics-звук, прямой HID-ввод и ViGEm XInput. После
-закрытия игры bridge завершает работу и виртуальный контроллер исчезает. Автозапись в
-Windows не создаётся, консольных окон нет.
+Steam-launcher запускает Bridge только на время DMC5. После закрытия игры Bridge
+завершается; постоянного процесса, службы, автозапуска и виртуального контроллера мод
+не создаёт. Консольных окон нет.
 REFramework запускается со скрытой панелью; при необходимости её по-прежнему можно
 открыть клавишей `Insert`.
 Launcher также скрывает родительское окно `cmd.exe`, через которое Steam разворачивает
@@ -54,9 +52,6 @@ Launcher также скрывает родительское окно `cmd.exe`
 сохраняет громкость и mute этого устройства, делает канал слышимым для актуаторов, а при
 закрытии DMC5 возвращает прежнее состояние. Каналы обычного динамика контроллера в
 haptics-потоке остаются пустыми.
-Без ViGEmBus установщик останавливается с ясной ошибкой. Драйвер не удаляется вместе с модом,
-потому что он может использоваться другими программами.
-
 PlayStation Accessories нужна для обновления прошивки и настройки контроллера, но не
 добавляет поддержку DualSense старым PC-играм. На время DMC5 её лучше закрывать.
 
@@ -114,9 +109,8 @@ Yamato. Для обычной отдачи действует watchdog 180 мс,
 
 Закройте игру и запустите `INSTALL-DMC5-DualSense.cmd`. Установщик находит Steam-копию,
 проверяет обязательные файлы, сохраняет каждую заменяемую версию в резервную копию и
-создаёт `install-manifest.json` с хешами. Полный release-архив содержит официальный
-подписанный установщик ViGEmBus 1.22.0: если драйвера нет, Windows покажет обычный запрос
-UAC и установщик добавит его автоматически. Ставить .NET отдельно не требуется.
+создаёт `install-manifest.json` с хешами. ViGEmBus и другие драйверы виртуального
+контроллера не требуются. Ставить .NET отдельно не требуется.
 
 В конце строка для Steam автоматически копируется в буфер обмена. Остаётся открыть
 `DMC5 -> Свойства -> Общие -> Параметры запуска` и нажать `Ctrl+V`.
@@ -153,9 +147,8 @@ powershell -ExecutionPolicy Bypass -File .\Test-DualSense.ps1 -Quick
 - `TriggerStrength`, `HapticsStrength`, `LightbarStrength`: сила от `0.0` до `1.0`.
 - `EnableAdaptiveTriggers`, `EnableAdvancedHaptics`, `EnableLightbar`: отдельное
   включение трёх трактов.
-- `EnableVirtualXInput`: прямой ввод DualSense и виртуальный XInput; для штатной
-  изолированной схемы оставьте `true`.
-- `EnableCalibrationLog`: технические CSV-журналы для отладки событий.
+- `EnableCalibrationLog`: подробные счётчики, event trace и технические
+  CSV-журналы; по умолчанию `false`, включайте только на время отладки.
 - `AudioDeviceContains`: часть имени четырёхканального аудиовыхода контроллера.
 - `EnsureHapticsEndpointAudible`: временно снять mute и применить рабочую громкость
   haptics-аудиовыхода на время DMC5; рекомендуется `true`.
@@ -176,32 +169,31 @@ payload-данные PAK не затрагиваются.
 
 ## Диагностика
 
-- `DMC5DualSense\bridge.log` — обнаружение HID, аудиовыхода и пятисекундные сводки;
+- `DMC5DualSense\bridge.log` — состояние Steam Input output и аудиовыхода;
 - `DMC5DualSense\launcher.log` — готовность моста перед штатным запуском из Steam;
-- `DMC5DualSense\plugin.log` — игровые hooks и отправленные именованные события;
+- `DMC5DualSense\plugin.log` — игровые hooks, назначения и ошибки;
 - `re2_framework_log.txt` — загрузка REFramework и C#-плагина;
 - `calibration.csv`, `nero-input.csv`, `motor.csv` — калибровочные данные, если
   `EnableCalibrationLog` включён.
 
-`DMC5DualSense\launcher.log` фиксирует готовность HID, аудиоканала, прямого
-ввода и виртуального XInput до запуска игры. Если там указано `controller=False`,
-`advancedHaptics=False`, `virtualXInput=False` или `directInput=False`, переподключите USB,
-закройте программы, которые могут удерживать контроллер или его аудиовыход, и снова
-нажмите «Играть» в Steam.
+При `EnableCalibrationLog=true` также включаются пятисекундные сводки Bridge,
+подробная трассировка событий и reflected metadata dumps. В обычной игре этот
+режим оставляйте выключенным, чтобы журналы не разрастались.
+
+`DMC5DualSense\launcher.log` фиксирует готовность Steam Input output и аудиоканала.
+Если там указано `controller=False` или `advancedHaptics=False`, переподключите USB,
+проверьте Steam Input и аудиовыход контроллера, затем снова нажмите «Играть» в Steam.
 
 ## Основа и лицензии
 
 - [REFramework](https://github.com/praydog/REFramework) — доступ к RE Engine.
-- [DualSense-Windows](https://github.com/Ohjurot/DualSense-Windows) — справочная реализация USB HID.
-- [HidSharp](https://github.com/IntergatedCircuits/HidSharp) — доступ к HID.
 - [NAudio](https://github.com/naudio/NAudio) — четырёхканальный WASAPI.
-- [ViGEm.NET](https://github.com/ViGEm/ViGEm.NET) и [ViGEmBus](https://github.com/ViGEm/ViGEmBus) — виртуальный XInput-контроллер.
 - [REE Content Editor](https://github.com/kagenocookie/REE-Content-Editor) — чтение и запись GUI RE Engine.
 - [Gamepad Asset Pack](https://github.com/AL2009man/Gamepad-Asset-Pack) и
   [Gamepad Prompt Asset Pack](https://github.com/AL2009man/Gamepad-Prompt-Asset-Pack) —
   изображение DualSense и символы PlayStation.
 
-Тексты открытых лицензий лежат в `Licenses`. Проект не связан с Capcom, Sony, Valve или
-Nefarius и требует принадлежащую пользователю Steam-копию DMC5. Release не содержит
+Тексты открытых лицензий лежат в `Licenses`. Проект не связан с Capcom, Sony или Valve
+и требует принадлежащую пользователю Steam-копию DMC5. Release не содержит
 исполняемый файл игры, сохранения, PAK payload или средства обхода DRM. Полный отказ от
 аффилированности и гарантий приведён в `NOTICE.txt`.

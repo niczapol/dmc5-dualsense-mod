@@ -34,7 +34,10 @@ internal static class Program
         HideParentCommandWindow(Log);
 
         if (args.Any(arg => arg.Equals("--background", StringComparison.OrdinalIgnoreCase)))
-            return EnsureResidentBridge(baseDirectory, readyPath, Log);
+        {
+            Log("Permanent background mode is no longer supported; launch DMC5 normally through Steam.");
+            return 2;
+        }
 
         var gameExecutable = ResolveGameExecutable(args, baseDirectory);
         if (gameExecutable is null)
@@ -49,29 +52,40 @@ internal static class Program
         var activeBridgePid = 0;
         var settings = LoadSettings(baseDirectory);
         var requireAdvancedHaptics = settings.EnableAdvancedHaptics;
-        var requireVirtualXInput = settings.EnableVirtualXInput;
 
         try
         {
-            var ready = ReadLiveBridgeReady(readyPath);
-            if (ready is not null)
+            if (Process.GetProcessesByName("DevilMayCry5").Any(process => !process.HasExited))
             {
-                activeBridgePid = ready.Pid;
-                Log($"Reusing live bridge PID {ready.Pid} (resident={ready.Resident}).");
-                ready = WaitForBridgeReady(readyPath, ready.Pid, TimeSpan.FromSeconds(6),
-                    requireAdvancedHaptics, requireVirtualXInput);
+                Log("DMC5 is already running; no second mod session was started.");
+                return 0;
             }
-            else
+
+            var existing = ReadLiveBridgeReady(readyPath);
+            if (existing is not null)
             {
-                TryDelete(readyPath);
-                TryDelete(readyPath + ".tmp");
-                bridge = StartBridge(baseDirectory, Log, resident: false);
-                ownsBridge = bridge is not null;
-                activeBridgePid = bridge?.Id ?? 0;
-                if (bridge is not null)
-                    ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(6),
-                        requireAdvancedHaptics, requireVirtualXInput);
+                Log($"Stopping orphaned bridge PID {existing.Pid} before the new game session.");
+                StopExistingBridge();
+                try
+                {
+                    using var oldBridge = Process.GetProcessById(existing.Pid);
+                    if (!oldBridge.WaitForExit(1500)) oldBridge.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // It may have exited after the shutdown packet.
+                }
             }
+
+            TryDelete(readyPath);
+            TryDelete(readyPath + ".tmp");
+            bridge = StartBridge(baseDirectory, Log);
+            ownsBridge = bridge is not null;
+            activeBridgePid = bridge?.Id ?? 0;
+            var ready = bridge is null
+                ? null
+                : WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(3),
+                    requireAdvancedHaptics);
 
             if (activeBridgePid == 0)
                 Log("Bridge could not be started; DMC5 will still be launched.");
@@ -82,8 +96,7 @@ internal static class Program
                 else
                     Log($"Bridge ready: controller={ready.ControllerReady}, " +
                         $"advancedHaptics={ready.AdvancedHapticsReady}, " +
-                        $"virtualXInput={ready.VirtualXInputReady}, " +
-                        $"directInput={ready.DirectInputReady}, {ready.Description}");
+                        $"output={ready.OutputBackend}, {ready.Description}");
             }
 
             var gameStart = new ProcessStartInfo
@@ -224,53 +237,7 @@ internal static class Program
     [DllImport("user32.dll")]
     private static extern bool ShowWindowAsync(IntPtr window, int command);
 
-    private static int EnsureResidentBridge(
-        string baseDirectory,
-        string readyPath,
-        Action<string> log)
-    {
-        var existing = ReadLiveBridgeReady(readyPath);
-        if (existing?.Resident == true)
-        {
-            log($"Resident bridge already running as PID {existing.Pid}: " +
-                $"controller={existing.ControllerReady}, advancedHaptics={existing.AdvancedHapticsReady}, " +
-                $"virtualXInput={existing.VirtualXInputReady}, directInput={existing.DirectInputReady}.");
-            return 0;
-        }
-
-        if (existing is not null)
-        {
-            log($"A session bridge is already running as PID {existing.Pid}; " +
-                "it cannot be replaced while DMC5 is active.");
-            return 5;
-        }
-
-        TryDelete(readyPath);
-        TryDelete(readyPath + ".tmp");
-        using var bridge = StartBridge(baseDirectory, log, resident: true);
-        if (bridge is null) return 2;
-
-        var settings = LoadSettings(baseDirectory);
-        var ready = WaitForBridgeReady(readyPath, bridge.Id, TimeSpan.FromSeconds(8),
-            settings.EnableAdvancedHaptics, settings.EnableVirtualXInput);
-        if (ready is null)
-        {
-            log("Resident bridge readiness timed out.");
-            return 3;
-        }
-
-        log($"Resident bridge ready as PID {ready.Pid}: controller={ready.ControllerReady}, " +
-            $"advancedHaptics={ready.AdvancedHapticsReady}, virtualXInput={ready.VirtualXInputReady}, " +
-            $"directInput={ready.DirectInputReady}, {ready.Description}");
-        return ready.ControllerReady &&
-               (!settings.EnableAdvancedHaptics || ready.AdvancedHapticsReady) &&
-               (!settings.EnableVirtualXInput ||
-                (ready.VirtualXInputReady && ready.DirectInputReady))
-            ? 0
-            : 4;
-    }
-
-    private static Process? StartBridge(string baseDirectory, Action<string> log, bool resident)
+    private static Process? StartBridge(string baseDirectory, Action<string> log)
     {
         var path = Path.Combine(baseDirectory, "DMC5DualSense.Bridge.exe");
         if (!File.Exists(path))
@@ -282,9 +249,7 @@ internal static class Program
         return Process.Start(new ProcessStartInfo
         {
             FileName = path,
-            Arguments = resident
-                ? "--resident"
-                : "--parent " + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+            Arguments = "--parent " + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
             WorkingDirectory = baseDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -350,8 +315,7 @@ internal static class Program
         string path,
         int processId,
         TimeSpan timeout,
-        bool requireAdvancedHaptics,
-        bool requireVirtualXInput)
+        bool requireAdvancedHaptics)
     {
         var deadline = DateTime.UtcNow + timeout;
         BridgeReady? latest = null;
@@ -366,10 +330,7 @@ internal static class Program
                     if (status?.Pid == processId)
                     {
                         latest = status;
-                        if (status.ControllerReady &&
-                            (!requireAdvancedHaptics || status.AdvancedHapticsReady) &&
-                            (!requireVirtualXInput ||
-                             (status.VirtualXInputReady && status.DirectInputReady)))
+                        if (!requireAdvancedHaptics || status.AdvancedHapticsReady)
                             return status;
                     }
                 }
@@ -408,11 +369,9 @@ internal static class Program
     private sealed class BridgeReady
     {
         public int Pid { get; set; }
-        public bool Resident { get; set; }
         public bool ControllerReady { get; set; }
         public bool AdvancedHapticsReady { get; set; }
-        public bool VirtualXInputReady { get; set; }
-        public bool DirectInputReady { get; set; }
+        public string OutputBackend { get; set; } = "";
         public string Description { get; set; } = "";
         public DateTime Utc { get; set; }
     }
@@ -420,6 +379,5 @@ internal static class Program
     private sealed class LauncherSettings
     {
         public bool EnableAdvancedHaptics { get; set; } = true;
-        public bool EnableVirtualXInput { get; set; } = true;
     }
 }

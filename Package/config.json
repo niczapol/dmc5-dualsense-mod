@@ -7,8 +7,7 @@
   "EnableAdaptiveTriggers": true,
   "EnableAdvancedHaptics": true,
   "EnableLightbar": true,
-  "EnableVirtualXInput": true,
-  "EnableCalibrationLog": true,
+  "EnableCalibrationLog": false,
   "AudioDeviceContains": "DualSense Wireless Controller",
   "EnsureHapticsEndpointAudible": true,
   "HapticsEndpointVolume": 1.0

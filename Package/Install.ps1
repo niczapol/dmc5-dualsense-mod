@@ -1,10 +1,11 @@
 ﻿param(
     [string]$GameDir,
-    [switch]$AllowExistingFramework
+    [switch]$AllowExistingFramework,
+    [switch]$NoClipboard
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.5.4-direct-keybinding-detection'
+$packageVersion = '1.5.5-steam-input-output'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {
@@ -195,37 +196,6 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
     throw 'Сначала закройте Devil May Cry 5.'
 }
 
-$dependencies = Join-Path $PSScriptRoot 'Dependencies'
-$vigemBus = Get-Service -Name 'ViGEmBus' -ErrorAction SilentlyContinue
-if (-not $vigemBus) {
-    $vigemInstaller = Join-Path $dependencies 'ViGEmBus_1.22.0_x64_x86_arm64.exe'
-    if (-not (Test-Path -LiteralPath $vigemInstaller -PathType Leaf)) {
-        throw 'Не найден ViGEmBus. Установите официальный Nefarius ViGEmBus 1.22.0 или используйте полный release-архив мода.'
-    }
-
-    Write-Host 'Для виртуального XInput требуется ViGEmBus. Сейчас появится стандартный запрос UAC.' -ForegroundColor Yellow
-    $driverInstall = Start-Process -FilePath $vigemInstaller -Verb RunAs -Wait -PassThru -ArgumentList @('/qn', '/norestart')
-    if ($driverInstall.ExitCode -notin @(0, 1641, 3010)) {
-        throw "Установщик ViGEmBus завершился с кодом $($driverInstall.ExitCode)."
-    }
-    Start-Sleep -Seconds 1
-    $vigemBus = Get-Service -Name 'ViGEmBus' -ErrorAction SilentlyContinue
-    if (-not $vigemBus) {
-        throw 'ViGEmBus установлен, но служба пока не появилась. Перезагрузите Windows и повторите установку мода.'
-    }
-}
-if ($vigemBus.Status -ne 'Running') {
-    try {
-        Start-Service -Name 'ViGEmBus'
-        $vigemBus = Get-Service -Name 'ViGEmBus'
-    } catch {
-        throw "ViGEmBus установлен, но не запускается: $($_.Exception.Message)"
-    }
-}
-if ($vigemBus.Status -ne 'Running') {
-    throw 'ViGEmBus не перешёл в состояние Running.'
-}
-
 $modDir = Join-Path $resolvedGameDir 'DMC5DualSense'
 $manifestPath = Join-Path $modDir 'install-manifest.json'
 if (Test-Path -LiteralPath $manifestPath) {
@@ -264,6 +234,7 @@ if (Test-Path -LiteralPath $modDir -PathType Container) {
     }
 }
 
+$dependencies = Join-Path $PSScriptRoot 'Dependencies'
 $frameworkZip = Join-Path $dependencies 'REFramework.zip'
 $csharpZip = Join-Path $dependencies 'csharp-api.zip'
 $uiRoot = Join-Path $PSScriptRoot 'UI'
@@ -352,15 +323,22 @@ try {
     # REFramework defaults to an open overlay. MenuOpen is applied only when
     # RememberMenuState is enabled, so setting MenuOpen=false by itself does not
     # suppress the panel. Preserve the user's complete file through the normal
-    # installer backup, and change only the three headless-startup keys.
+    # installer backup, enable loose GUI/texture overrides without verbose
+    # per-file logging, and keep REFramework headless at startup.
     $refConfigTarget = Join-Path $resolvedGameDir 're2_fw_config.txt'
     $refConfigSource = Join-Path $temporary 're2_fw_config.txt'
-    $refConfigLines = if (Test-Path -LiteralPath $refConfigTarget -PathType Leaf) {
-        [Collections.Generic.List[string]]::new([string[]](Get-Content -LiteralPath $refConfigTarget))
-    } else {
-        [Collections.Generic.List[string]]::new()
+    # Do not assign an empty List through a PowerShell expression: an empty
+    # enumerable produces no pipeline output and becomes $null on a clean game
+    # directory. Construct the list first, then populate it explicitly.
+    $refConfigLines = [Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $refConfigTarget -PathType Leaf) {
+        $refConfigLines.AddRange([string[]](Get-Content -LiteralPath $refConfigTarget))
     }
     foreach ($setting in ([ordered]@{
+        LooseFileLoader_Enabled = 'true'
+        LooseFileLoader_LogAccessedFiles = 'false'
+        LooseFileLoader_LogLooseFiles = 'false'
+        LooseTextureLoader_Enabled = 'true'
         REFrameworkConfig_MenuOpen = 'false'
         REFrameworkConfig_RememberMenuState = 'true'
         ScriptRunner_OpenDebugConsoleAtStartup = 'false'
@@ -447,15 +425,17 @@ try {
     Write-Host 'DMC5 DualSense Layer установлен.' -ForegroundColor Green
     Write-Host "Игра: $resolvedGameDir"
     Write-Host 'Bridge запускается только на время DMC5 и закрывается вместе с игрой.'
-    Write-Host 'Он читает DualSense напрямую, а управление передаёт в DMC5 через ViGEm XInput.'
-    Write-Host 'Для DMC5 обязательно отключите Steam Input: Свойства -> Контроллер -> Отключить.' -ForegroundColor Yellow
+    Write-Host 'Ввод и тачпад остаются штатному Steam Input; Bridge отправляет только отклик DualSense.'
+    Write-Host 'Для DMC5 оставьте Steam Input включённым или выберите «Использовать настройки по умолчанию».' -ForegroundColor Yellow
     Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
     $steamLaunchCommand = '"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%'
     $copiedToClipboard = $false
-    try {
-        Set-Clipboard -Value $steamLaunchCommand
-        $copiedToClipboard = $true
-    } catch { }
+    if (-not $NoClipboard) {
+        try {
+            Set-Clipboard -Value $steamLaunchCommand
+            $copiedToClipboard = $true
+        } catch { }
+    }
     Write-Host 'Один раз укажите в Steam -> Свойства -> Параметры запуска:'
     Write-Host $steamLaunchCommand -ForegroundColor Cyan
     if ($copiedToClipboard) {

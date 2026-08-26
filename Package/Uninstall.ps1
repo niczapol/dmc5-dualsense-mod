@@ -51,7 +51,7 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
 Get-Process -Name 'DMC5DualSense.Bridge' -ErrorAction SilentlyContinue | Stop-Process -Force
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 
-if ($manifest.Autostart) {
+if ($manifest.PSObject.Properties['Autostart'] -and $manifest.Autostart) {
     $autostart = $manifest.Autostart
     $currentValue = $null
     try {

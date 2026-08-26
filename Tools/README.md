@@ -1,7 +1,8 @@
-# Build tools
+# Managed fallback build tools
 
-The tools in this directory produce deterministic release and UI outputs for
-the DMC5 DualSense mod.
+The tools in this directory produce the deterministic self-contained C#
+fallback release and shared UI outputs. The recommended native release uses
+`Native/Prepare-Dependencies.ps1` and `Native/build-package.ps1`.
 
 `Build-Release.ps1` validates required inputs, runs the test suite, publishes
 self-contained Windows executables, writes a per-file manifest, and creates a
@@ -21,11 +22,13 @@ game:
 
 ```powershell
 .\Tools\Test-CleanInstall.ps1 `
-  -PackageZip '.\artifacts\v1.5.5\DMC5DualSense-v1.5.5-win-x64.zip'
+  -PackageZip '.\artifacts\v1.6.0-managed\DMC5DualSense-Managed-1.6.0-win-x64.zip'
 ```
 
-`UiAssetBuilder` prepares the DualSense controller atlases and PlayStation
-system-button prompts while preserving unaffected UI regions.
+`UiAssetBuilder` prepares the DualSense controller atlases and rebuilds the
+80x80 PlayStation controller-prompt cells at 4x resolution. It zeroes the
+near-transparent RGB fringe before BC7 encoding while preserving keyboard-only
+and unrelated UI regions.
 
 `GuiLayoutTool` aligns the interactive button positions used by the controls
 menu and The Void with the visible DualSense diagram. It also assigns the

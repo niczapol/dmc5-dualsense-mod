@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.5.4
+# DMC5 DualSense Layer 1.5.5
 
 Unofficial native DualSense support for the Windows Steam version of Devil May
 Cry 5. The mod adds adaptive triggers, advanced haptics, character lightbar
@@ -18,7 +18,7 @@ colors, PlayStation button prompts, and an aligned DualSense controller diagram.
 - Windows 10 or 11, x64;
 - a legitimate Steam copy of Devil May Cry 5;
 - a Sony DualSense connected by USB;
-- Steam Input disabled specifically for Devil May Cry 5;
+- Steam Input enabled or left at its default setting for Devil May Cry 5;
 - PlayStation Accessories, DS4Windows, DualSenseX, and similar controller tools
   closed while playing.
 
@@ -30,32 +30,33 @@ so the complete feature set requires USB.
 1. Close Devil May Cry 5.
 2. Extract the complete release ZIP to a normal writable directory.
 3. Run `INSTALL-DMC5-DualSense.cmd`.
-4. If ViGEmBus is missing, accept the standard Windows UAC prompt. The bundled
-   installer is the official, signed Nefarius 1.22.0 release.
-5. In Steam, open `Devil May Cry 5 -> Properties -> Controller` and select
-   `Disable Steam Input`.
-6. Paste the launch command copied by the installer into
+4. In Steam, open `Devil May Cry 5 -> Properties -> Controller` and leave Steam
+   Input enabled or select `Use default settings`.
+5. Paste the launch command copied by the installer into
    `Properties -> General -> Launch Options`.
-7. Connect the controller by USB and use the normal Steam Play button.
+6. Connect the controller by USB and use the normal Steam Play button.
 
 Running the installer over an earlier release performs a safe automatic upgrade;
 `config.json` and diagnostic logs are preserved.
 
-The bridge starts before DMC5 and exits with it. It creates no Windows startup
-entry, opens no console window, and leaves no virtual Xbox controller running
-outside the game. The REFramework panel starts hidden and remains available with
+The bridge starts for the DMC5 session and exits with it. It creates no Windows
+startup entry, service, resident controller watcher, or virtual controller. The
+REFramework panel starts hidden and remains available with
 the `Insert` key for diagnostics.
 The launcher also hides the parent `cmd.exe` window Steam uses to expand the
 `%command%` wrapper while retaining session cleanup after DMC5 exits.
 
 ## What the launcher verifies
 
-Before DMC5 starts, all four paths must be ready:
+The session uses two independent output paths:
 
-- writable DualSense USB output for triggers and the lightbar;
-- four-channel WASAPI advanced haptics;
-- direct physical DualSense input;
-- the ViGEm virtual Xbox 360 input seen by this older PC game.
+- Steam Input's DualSense output API for adaptive triggers, lightbar color, and
+  ordinary vibration;
+- four-channel WASAPI audio for advanced haptics.
+
+Normal buttons, sticks, remapping, and the touchpad remain on DMC5's standard
+Steam Input path. The mod neither captures physical input nor creates a virtual
+Xbox controller.
 
 Windows often leaves the separate DualSense speaker endpoint at 0% volume. The
 bridge remembers that endpoint's volume and mute state, makes it audible only
@@ -81,8 +82,12 @@ After installation, settings and logs are located in the game's
 
 - `config.json` — strengths, feature switches, and audio endpoint settings;
 - `launcher.log` — game and bridge startup readiness;
-- `bridge.log` — HID, trigger, rumble, audio, and input counters;
-- `plugin.log` — RE Engine hooks and gameplay events.
+- `bridge.log` — Steam Input output/audio readiness and runtime errors;
+- `plugin.log` — RE Engine hooks, live bindings, and runtime errors.
+
+`EnableCalibrationLog` defaults to `false`. Set it to `true` only for a bounded
+diagnostic session; it enables five-second counters, per-event traces, reflected
+metadata dumps, and the calibration CSV files.
 
 Run `TEST-DualSense.cmd` only when you intentionally want the full hardware
 effect test. It is not required for ordinary installation.

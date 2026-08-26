@@ -136,13 +136,6 @@ foreach ($dependency in $assetManifest.Dependencies) {
     $dependencyFiles[[string]$dependency.Name] = $target
 }
 
-$vigemPath = [string]$dependencyFiles['ViGEmBus_1.22.0_x64_x86_arm64.exe']
-$signature = Get-AuthenticodeSignature -LiteralPath $vigemPath
-if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid -or
-    $signature.SignerCertificate.Subject -notlike 'CN=Nefarius Software Solutions*') {
-    throw "ViGEmBus Authenticode validation failed: $($signature.Status), $($signature.SignerCertificate.Subject)"
-}
-
 $localDotnet = Join-Path $repoRoot '.dotnet\dotnet.exe'
 $dotnet = if (Test-Path -LiteralPath $localDotnet -PathType Leaf) {
     $localDotnet
@@ -188,6 +181,9 @@ if ($LASTEXITCODE -ne 0 -or -not $trackedPackageFiles) {
 foreach ($relativePath in $trackedPackageFiles) {
     if ($relativePath -eq 'Package/BUILD_INFO.txt') { continue }
     $source = Join-Path $repoRoot $relativePath
+    # A pre-commit test build must reflect the current worktree, including
+    # intentionally deleted tracked package files.
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { continue }
     $destinationRelative = $relativePath.Substring('Package/'.Length).Replace('/', '\')
     Copy-ExactFile $source (Join-Path $stageRoot $destinationRelative)
 }
@@ -218,7 +214,8 @@ $buildInfo = @(
     "Target: Devil May Cry 5 Steam / Windows x64",
     "Runtime: .NET $dotnetVersion, self-contained=$selfContained",
     "Controller: Sony DualSense USB VID_054C/PID_0CE6",
-    "Input: direct HID -> ViGEm Xbox 360",
+    "Input: Steam Input (native game path)",
+    "Output: Steam Input DualSense API + WASAPI advanced haptics",
     "Asset manifest SHA256: $assetManifestHash",
     '',
     'This package passed deterministic logic tests and exact input hash validation.'

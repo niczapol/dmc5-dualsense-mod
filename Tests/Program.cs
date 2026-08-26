@@ -58,52 +58,36 @@ Run("Nero bindings are read independently from the active layout", () =>
     Equal("Right", runtime.NeroAttackLargeMapping);
 });
 
-Run("neutral USB DualSense input maps to neutral XInput", () =>
+Run("Steam Input trigger payload turns both DualSense triggers off", () =>
 {
-    var bytes = NeutralDualSenseReport();
-    Equal(true, DualSenseInputReport.TryParse(bytes, out var input));
-    Equal((ushort)0, input.Buttons);
-    Equal((byte)0, input.LeftTrigger);
-    Equal((byte)0, input.RightTrigger);
-    Equal((short)0, input.LeftThumbX);
-    Equal((short)0, input.LeftThumbY);
-    Equal((short)0, input.RightThumbX);
-    Equal((short)0, input.RightThumbY);
+    var payload = SteamDualSenseTriggerPayload.Build(TriggerEffect.Off, TriggerEffect.Off);
+    Equal(SteamDualSenseTriggerPayload.Size, payload.Length);
+    Equal((byte)0x03, payload[0]);
+    Equal(0, BitConverter.ToInt32(payload, SteamDualSenseTriggerPayload.LeftCommandOffset));
+    Equal(0, BitConverter.ToInt32(payload, SteamDualSenseTriggerPayload.RightCommandOffset));
 });
 
-Run("DualSense controls map atomically to the expected Xbox report", () =>
+Run("Steam Input trigger payload preserves the PS5 vibration command layout", () =>
 {
-    var bytes = NeutralDualSenseReport();
-    bytes[1] = 0;
-    bytes[2] = 0;
-    bytes[3] = 255;
-    bytes[4] = 255;
-    bytes[5] = 73;
-    bytes[6] = 201;
-    bytes[8] = 0x21; // Cross + up/right
-    bytes[9] = 0xA3; // L1, R1, Options, R3
-    bytes[10] = 0x03; // PS and touchpad click
-
-    Equal(true, DualSenseInputReport.TryParse(bytes, out var input));
-    Equal((ushort)0x17B9, input.Buttons);
-    Equal((byte)73, input.LeftTrigger);
-    Equal((byte)201, input.RightTrigger);
-    Equal(short.MinValue, input.LeftThumbX);
-    Equal(short.MaxValue, input.LeftThumbY);
-    Equal(short.MaxValue, input.RightThumbX);
-    Equal((short)-32767, input.RightThumbY);
+    var payload = SteamDualSenseTriggerPayload.Build(
+        TriggerEffect.Vibration(1, 4, 76), TriggerEffect.Off);
+    var data = SteamDualSenseTriggerPayload.LeftCommandOffset + 8;
+    Equal(3, BitConverter.ToInt32(payload, SteamDualSenseTriggerPayload.LeftCommandOffset));
+    Equal((byte)1, payload[data]);
+    Equal((byte)4, payload[data + 1]);
+    Equal((byte)76, payload[data + 2]);
 });
 
-Run("DualSense touchpad click maps to Xbox Back and releases cleanly", () =>
+Run("Steam Input trigger payload preserves independent PS5 weapon sides", () =>
 {
-    var bytes = NeutralDualSenseReport();
-    bytes[10] = 0x02;
-    Equal(true, DualSenseInputReport.TryParse(bytes, out var pressed));
-    Equal((ushort)0x0020, pressed.Buttons);
-
-    bytes[10] = 0;
-    Equal(true, DualSenseInputReport.TryParse(bytes, out var released));
-    Equal((ushort)0, released.Buttons);
+    var payload = SteamDualSenseTriggerPayload.Build(
+        TriggerEffect.Off, TriggerEffect.Weapon(4, 8, 5));
+    var data = SteamDualSenseTriggerPayload.RightCommandOffset + 8;
+    Equal(0, BitConverter.ToInt32(payload, SteamDualSenseTriggerPayload.LeftCommandOffset));
+    Equal(2, BitConverter.ToInt32(payload, SteamDualSenseTriggerPayload.RightCommandOffset));
+    Equal((byte)4, payload[data]);
+    Equal((byte)8, payload[data + 1]);
+    Equal((byte)5, payload[data + 2]);
 });
 
 if (failures.Count > 0)
@@ -140,18 +124,6 @@ static BridgeConfig Config() => new()
     EnableAdaptiveTriggers = true,
     TriggerStrength = 1f
 };
-
-static byte[] NeutralDualSenseReport()
-{
-    var bytes = new byte[64];
-    bytes[0] = 0x01;
-    bytes[1] = 128;
-    bytes[2] = 128;
-    bytes[3] = 128;
-    bytes[4] = 128;
-    bytes[8] = 0x08;
-    return bytes;
-}
 
 static GameState State(string character, int danteWeaponId = -1) => new(
     character, true, 100, 100, 0, 0, 0,

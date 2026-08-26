@@ -117,20 +117,40 @@ internal static class Program
     {
         if (args.Length != 4)
             throw new ArgumentException(
-                "patch-markers requires: <ui8013-atlas.png> <dualsense-assets-directory> <output.png>");
+                "patch-markers requires: <controller-atlas.png> <dualsense-assets-directory> <output.png>");
 
         using var atlas = LoadArgb(args[1]);
-        if (atlas.Width != 512 || atlas.Height != 512)
+        if (atlas.Width != atlas.Height || (atlas.Width != 512 && atlas.Width != 1024))
             throw new InvalidDataException(
-                $"ui8013 marker atlas must be 512x512, got {atlas.Width}x{atlas.Height}.");
+                $"Controller marker atlas must be 512x512 or 1024x1024, got {atlas.Width}x{atlas.Height}.");
 
         var assets = Path.GetFullPath(args[2]);
-        ReplaceMarker(atlas, new Rectangle(288, 104, 52, 26),
-            Path.Combine(assets, "DualSense_L2-Active.png"));
-        ReplaceMarker(atlas, new Rectangle(340, 104, 52, 26),
-            Path.Combine(assets, "DualSense_L1-Active.png"));
-        ReplaceMarker(atlas, new Rectangle(392, 104, 104, 78),
-            Path.Combine(assets, "DualSense_Touchpad-Click.png"));
+        if (atlas.Width == 512)
+        {
+            ReplaceMarker(atlas, new Rectangle(288, 104, 52, 26),
+                Path.Combine(assets, "DualSense_L2-Active.png"));
+            ReplaceMarker(atlas, new Rectangle(340, 104, 52, 26),
+                Path.Combine(assets, "DualSense_L1-Active.png"));
+            ReplaceMarker(atlas, new Rectangle(392, 104, 104, 78),
+                Path.Combine(assets, "DualSense_Touchpad-Click.png"));
+        }
+        else
+        {
+            // ui4002 (Settings) uses independent 128x64 shoulder cells. The
+            // original PC cells contain Xbox silhouettes even after replacing
+            // the controller artwork, so geometry changes alone cannot fix it.
+            ReplaceMarker(atlas, new Rectangle(720, 256, 128, 64),
+                Path.Combine(assets, "DualSense_L2-Active.png"));
+            ReplaceMarker(atlas, new Rectangle(848, 256, 128, 64),
+                Path.Combine(assets, "DualSense_L1-Active.png"));
+            // Circle's source artwork fills its PNG edge-to-edge. Keep the UV
+            // cell at 64x64 but add transparent padding so its visible diameter
+            // matches the physical face button in the large controller image.
+            var circleCell = new Rectangle(912, 0, 64, 64);
+            ReplaceMarkerFit(atlas, circleCell,
+                Path.Combine(assets, "DualSense_Circle.png"), 0.82);
+            DrawCircleGlyph(atlas, circleCell);
+        }
 
         var output = Path.GetFullPath(args[3]);
         SavePng(atlas, output);
@@ -144,6 +164,37 @@ internal static class Program
         Clear(atlas, uvCell);
         using var graphics = CreateGraphics(atlas);
         DrawPixelExact(graphics, scaled, uvCell.Location);
+    }
+
+    private static void ReplaceMarkerFit(
+        Bitmap atlas, Rectangle uvCell, string assetPath, double fill = 1.0)
+    {
+        using var asset = LoadArgb(assetPath);
+        var scale = Math.Min((double)uvCell.Width / asset.Width,
+                             (double)uvCell.Height / asset.Height) *
+                    Math.Clamp(fill, 0.1, 1.0);
+        var size = new Size(Math.Max(1, (int)Math.Round(asset.Width * scale)),
+                            Math.Max(1, (int)Math.Round(asset.Height * scale)));
+        using var scaled = Scale(asset, size);
+        var location = new Point(uvCell.Left + (uvCell.Width - size.Width) / 2,
+                                 uvCell.Top + (uvCell.Height - size.Height) / 2);
+        Clear(atlas, uvCell);
+        using var graphics = CreateGraphics(atlas);
+        DrawPixelExact(graphics, scaled, location);
+    }
+
+    private static void DrawCircleGlyph(Bitmap atlas, Rectangle uvCell)
+    {
+        // Match the pink/red PlayStation Circle glyph used by the working
+        // ui8013 (Void) marker while retaining the already calibrated outer
+        // highlight diameter in ui4002 (Settings).
+        using var graphics = CreateGraphics(atlas);
+        using var pen = new Pen(Color.FromArgb(255, 255, 153, 153), 3.5f);
+        graphics.DrawEllipse(pen,
+            uvCell.Left + 19.0f,
+            uvCell.Top + 19.0f,
+            26.0f,
+            26.0f);
     }
 
     private static int TexToDds(string[] args)
@@ -441,7 +492,7 @@ internal static class Program
         Console.Error.WriteLine(
             "Usage:\n" +
             "  build <controller.png> <ui0010-base.png> <ui4002-base.png> <ui8013-base.png> <output-dir>\n" +
-            "  patch-markers <ui8013-atlas.png> <dualsense-assets-directory> <output.png>\n" +
+            "  patch-markers <controller-atlas.png> <dualsense-assets-directory> <output.png>\n" +
             "  patch-bc7 <base.tex> <encoded.dds> <output.tex> <left,top,right,bottom> [...]\n" +
             "  tex-to-dds <template.dds> <input.tex> <output.dds>");
     }

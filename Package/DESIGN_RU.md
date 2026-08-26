@@ -22,27 +22,26 @@ REFramework.NET plugin
             │ UDP 127.0.0.1:27105
             ▼
 DMC5DualSense.Bridge.exe
-  ├─ adaptive triggers ──► USB HID ──► L2/R2
-  ├─ character colors ───► USB HID ──► lightbar
+  ├─ adaptive triggers ──► Steam Input ──► L2/R2
+  ├─ character colors ───► Steam Input ──► lightbar
+  ├─ ordinary rumble ────► Steam Input ──► motors
   ├─ advanced haptics ───► WASAPI ───► DualSense actuators
-  └─ direct input ───────► ViGEm ────► DMC5 XInput
+
+DMC5 input ◄───────────── Steam Input ◄──────────── physical DualSense
 ```
 
 Plugin только наблюдает за игровым состоянием и отправляет локальную
-телеметрию. Bridge управляет физическим контроллером, а DMC5 получает ввод через
-виртуальный Xbox 360 controller. UDP доступен только через loopback.
+телеметрию. Штатный Steam Input полностью владеет вводом DMC5 и тачпадом. Bridge
+использует официальный output API Steam Input и не создаёт виртуальный controller.
+UDP доступен только через loopback.
 
 ## Запуск и ввод
 
-Steam Input для DMC5 должен быть отключён, чтобы только Bridge управлял
-физическим откликом DualSense. Launcher запускает Bridge перед игрой, проверяет
-готовность USB, advanced haptics, прямого ввода и ViGEm, затем открывает DMC5.
-После закрытия игры Bridge и виртуальный контроллер автоматически завершают
-работу. Фоновое консольное окно и стартовая панель REFramework скрыты.
-
-Полное состояние стиков, курков, D-pad и кнопок передаётся в одном XInput-отчёте,
-поэтому одновременно доступны штатное управление DMC5 и физические возможности
-DualSense.
+Steam Input для DMC5 остаётся включённым. Launcher запускает Bridge только для
+текущей игровой сессии, затем открывает DMC5 и гарантированно завершает Bridge
+после выхода из игры. Постоянный watcher, запись автозапуска, отдельная служба и
+виртуальный геймпад не создаются. Фоновое консольное окно и стартовая панель
+REFramework скрыты.
 
 ## Возможности контроллера
 

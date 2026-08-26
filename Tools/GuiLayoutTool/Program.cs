@@ -3,30 +3,51 @@ using ReeLib;
 using ReeLib.Clip;
 using ReeLib.Common;
 using ReeLib.Gui;
+using ReeLib.Uvs;
 
 namespace DMC5DualSense.GuiLayoutTool;
 
 internal static class Program
 {
-    private static readonly IReadOnlyDictionary<string, Vector2> LargePositions =
-        new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase)
+    private static readonly string[] LargeControllerContainers = ["s_c_XB1", "s_c_PS4"];
+
+    private sealed record LargeMarker(Vector2 Position, Vector2? Size = null);
+
+    private static readonly IReadOnlyDictionary<string, LargeMarker> LargeMarkers =
+        new Dictionary<string, LargeMarker>(StringComparer.OrdinalIgnoreCase)
         {
-            ["BtnU"] = new(585.5f, 185.0f),
-            ["BtnD"] = new(582.5f, 272.0f),
-            ["BtnL"] = new(531.0f, 230.0f),
-            ["BtnR"] = new(638.0f, 229.0f),
-            ["DirU"] = new(132.5f, 195.0f),
-            ["DirD"] = new(132.5f, 266.0f),
-            ["DirL"] = new(87.0f, 231.0f),
-            ["DirR"] = new(180.5f, 231.0f),
-            ["LT"] = new(137.0f, 51.0f),
-            ["LB"] = new(137.0f, 79.0f),
-            ["RT"] = new(579.0f, 51.0f),
-            ["RB"] = new(579.0f, 79.0f),
-            ["LStP"] = new(244.0f, 317.0f),
-            ["RStP"] = new(473.0f, 317.0f),
-            ["CenL"] = new(359.0f, 171.0f),
-            ["CenR"] = new(530.0f, 158.0f)
+            ["BtnU"] = new(new(585.5f, 185.0f)),
+            ["BtnD"] = new(new(582.5f, 272.0f)),
+            ["BtnL"] = new(new(531.0f, 230.0f)),
+            ["BtnR"] = new(new(638.0f, 229.0f)),
+            // The four UV cells have different transparent/internal offsets.
+            // These calibrated anchors put each cell's visible cyan shape on
+            // the physical D-pad button; the parent controller panel then owns
+            // all resolution/aspect scaling as a single unit.
+            ["DirU"] = new(new(132.0f, 199.0f)),
+            ["DirD"] = new(new(132.0f, 261.0f)),
+            ["DirL"] = new(new(98.0f, 230.0f)),
+            ["DirR"] = new(new(168.0f, 230.0f)),
+            // Nero binds all four directions as one action. DirAll animates
+            // the right marker directly and reveals three base display layers
+            // for left/down/up; those defaults are aligned separately below.
+            ["DirAll"] = new(new(168.0f, 230.0f)),
+            // ui4002 uses the same artwork as ui8013 at 2.5x scale. Keep the
+            // Settings shoulder overlays proportional to the corrected Void
+            // overlays instead of stretching both buttons across a 128px cell.
+            ["LT"] = new(new(135.5f, 60.0f), new(96.25f, 72.5f)),
+            ["LB"] = new(new(133.0f, 91.5f), new(106.25f, 62.5f)),
+            ["RT"] = new(new(580.5f, 60.0f), new(-96.25f, 72.5f)),
+            ["RB"] = new(new(583.0f, 91.5f), new(-106.25f, 62.5f)),
+            // Pattern 13 contains a 91x82 visible circle inside its 128x128 UV
+            // cell. Scale the Settings markers to the complete movable stick
+            // caps (centre plus rim), matching the visual coverage already used
+            // by the smaller Void controller. These anchors are independent of
+            // c_LS/c_RS below and are patched into both Settings timelines.
+            ["LStP"] = new(new(244.0f, 316.0f), new(112.0f, 120.0f)),
+            ["RStP"] = new(new(473.0f, 316.0f), new(112.0f, 120.0f)),
+            ["CenL"] = new(new(359.0f, 171.0f)),
+            ["CenR"] = new(new(530.0f, 158.0f))
         };
 
     private sealed record SmallMarker(Vector2 Position, uint Pattern, Vector2? Size = null);
@@ -38,10 +59,15 @@ internal static class Program
             ["c_BtnD"] = new(new(233.0f, 111.5f), 3),
             ["c_BtnL"] = new(new(212.0f, 94.5f), 4),
             ["c_BtnR"] = new(new(255.0f, 94.0f), 5),
-            ["c_DirU"] = new(new(53.0f, 80.5f), 6),
-            ["c_DirD"] = new(new(53.0f, 109.0f), 7),
-            ["c_DirL"] = new(new(35.0f, 95.0f), 8),
-            ["c_DirR"] = new(new(72.0f, 95.0f), 9),
+            // These are calibrated against the actual D-pad silhouettes in
+            // the 1467x816 DualSense source after its 280x156 placement at
+            // (3,12). The four UV cells have different internal alpha bounds,
+            // so using the cell centre (or the old Xbox anchors) pushes Down,
+            // Left and Right visibly away from their physical buttons.
+            ["c_DirU"] = new(new(52.3f, 82.5f), 6),
+            ["c_DirD"] = new(new(53.5f, 106.5f), 7),
+            ["c_DirL"] = new(new(39.0f, 95.0f), 8),
+            ["c_DirR"] = new(new(68.0f, 95.0f), 9),
             // Match the native 1467x816 DualSense artwork after it is scaled
             // into the 280x156 controller panel. L2/R2 are taller and narrower
             // than L1/R1; using the old common 52x26 rectangle made the two
@@ -50,8 +76,8 @@ internal static class Program
             ["c_LB"] = new(new(53.0f, 39.0f), 12, new(42.5f, 25.0f)),
             ["c_RT"] = new(new(232.0f, 26.5f), 11, new(-38.5f, 29.0f)),
             ["c_RB"] = new(new(233.0f, 39.0f), 12, new(-42.5f, 25.0f)),
-            ["c_LS"] = new(new(97.5f, 129.5f), 13),
-            ["c_RS"] = new(new(189.0f, 129.5f), 13),
+            ["c_LS"] = new(new(98.0f, 131.5f), 13, new(44.0f, 46.0f)),
+            ["c_RS"] = new(new(189.5f, 131.5f), 13, new(44.0f, 46.0f)),
             ["c_CenL"] = new(new(143.0f, 72.0f), 37, new(118.5f, 61.5f)),
             ["c_CenR"] = new(new(212.0f, 66.0f), 10)
         };
@@ -62,6 +88,10 @@ internal static class Program
         {
             if (args.Length == 2 && args[0].Equals("inspect", StringComparison.OrdinalIgnoreCase))
                 return Inspect(args[1]);
+            if (args.Length == 2 && args[0].Equals("inspect-all", StringComparison.OrdinalIgnoreCase))
+                return Inspect(args[1], inspectAll: true);
+            if (args.Length == 2 && args[0].Equals("inspect-uvs", StringComparison.OrdinalIgnoreCase))
+                return InspectUvs(args[1]);
 
             if (args.Length != 3 ||
                 (!args[0].Equals("large", StringComparison.OrdinalIgnoreCase) &&
@@ -70,7 +100,9 @@ internal static class Program
                 Console.Error.WriteLine(
                     "Usage:\n" +
                     "  <large|small> <input.gui.*> <output.gui.*>\n" +
-                    "  inspect <input.gui.*>");
+                    "  inspect <input.gui.*>\n" +
+                    "  inspect-all <input.gui.*>\n" +
+                    "  inspect-uvs <input.uvs.*>");
                 return 2;
             }
 
@@ -95,16 +127,36 @@ internal static class Program
         }
     }
 
-    private static int Inspect(string path)
+    private static int InspectUvs(string path)
+    {
+        using var uvs = new UvsFile(new FileHandler(path));
+        if (!uvs.Read()) throw new InvalidDataException("Failed to read UVS file.");
+        for (var sequenceIndex = 0; sequenceIndex < uvs.Sequences.Count; sequenceIndex++)
+        {
+            var sequence = uvs.Sequences[sequenceIndex];
+            for (var patternIndex = 0; patternIndex < sequence.patterns.Count; patternIndex++)
+            {
+                UvsPattern pattern = sequence.patterns[patternIndex];
+                Console.WriteLine(
+                    $"S{sequenceIndex} P{patternIndex}: {pattern}; flags=0x{pattern.flags:X}; " +
+                    $"cutout={pattern.cutoutUVCount}");
+            }
+        }
+        return 0;
+    }
+
+    private static int Inspect(string path, bool inspectAll = false)
     {
         using var gui = new GuiFile(new FileHandler(path));
         if (!gui.Read()) throw new InvalidDataException("Failed to read GUI file.");
 
         foreach (var container in gui.Containers)
         {
-            if (!container.Info.Name.Equals("s_c_XB1", StringComparison.OrdinalIgnoreCase)) continue;
-            foreach (var clip in container.Clips.Where(item =>
-                         LargePositions.ContainsKey(item.name) ||
+            if (!inspectAll && !LargeControllerContainers.Contains(container.Info.Name,
+                    StringComparer.OrdinalIgnoreCase)) continue;
+            Console.WriteLine($"CONTAINER {container.Info.Name}");
+            foreach (var clip in container.Clips.Where(item => inspectAll ||
+                         LargeMarkers.ContainsKey(item.name) ||
                          item.name.Contains("Cen", StringComparison.OrdinalIgnoreCase)))
             {
                 Console.WriteLine($"CLIP {clip.name}");
@@ -119,15 +171,22 @@ internal static class Program
 
         if (gui.RootView is not null)
         {
-            var smallRoot = FindDisplay(gui.RootView, "c_XB1") ?? gui.RootView;
-            foreach (var name in SmallMarkers.Keys)
+            if (inspectAll)
             {
-                var display = FindDisplay(smallRoot, name);
-                if (display is null) continue;
-                DumpDisplay(display, "");
+                DumpDisplay(gui.RootView, "");
+            }
+            else
+            {
+                var smallRoot = FindDisplay(gui.RootView, "c_XB1") ?? gui.RootView;
+                foreach (var name in SmallMarkers.Keys)
+                {
+                    var display = FindDisplay(smallRoot, name);
+                    if (display is null) continue;
+                    DumpDisplay(display, "");
+                }
             }
         }
-        foreach (var attribute in gui.AttributeOverrides.Where(item =>
+        foreach (var attribute in gui.AttributeOverrides.Where(item => inspectAll ||
                      SmallMarkers.Keys.Any(name =>
                          item.TargetPath.Contains(name, StringComparison.OrdinalIgnoreCase))))
             Console.WriteLine($"OVERRIDE {attribute.TargetPath} | {attribute.Name} " +
@@ -156,24 +215,74 @@ internal static class Program
 
     private static int AlignLarge(GuiFile gui)
     {
-        var container = gui.Containers.FirstOrDefault(item =>
-            item.Info.Name.Equals("s_c_XB1", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidDataException("s_c_XB1 clip container was not found.");
+        var containers = gui.Containers.Where(item =>
+            LargeControllerContainers.Contains(item.Info.Name,
+                StringComparer.OrdinalIgnoreCase)).ToArray();
+        if (containers.Length == 0)
+            throw new InvalidDataException("Neither s_c_XB1 nor s_c_PS4 was found.");
 
-        var changed = 0;
+        var changed = AlignGroupedDpadDefaults(gui);
+        foreach (var container in containers)
         foreach (var clip in container.Clips)
         {
-            if (clip.clip is null || !LargePositions.TryGetValue(clip.name, out var position)) continue;
+            if (clip.clip is null || !LargeMarkers.TryGetValue(clip.name, out var marker)) continue;
+            // DMC5 has two independent controller timelines in this screen.
+            // Nero's grouped D-pad and the Settings shoulder indicators can be
+            // rendered by s_c_PS4, while other layouts use s_c_XB1. Patch those
+            // controls in both timelines; retain the PS4-specific face/stick
+            // positions which are already aligned with the replacement art.
+            // Stick-press markers are also patched in both timelines because
+            // the original PS4 anchors sit above the DualSense stick caps.
+            if (container.Info.Name.Equals("s_c_PS4", StringComparison.OrdinalIgnoreCase) &&
+                !clip.name.StartsWith("Dir", StringComparison.OrdinalIgnoreCase) &&
+                clip.name is not ("LT" or "LB" or "RT" or "RB" or "LStP" or "RStP"))
+                continue;
             foreach (var track in clip.clip.Tracks.Where(track =>
                          track.Name.StartsWith("t_btn_active", StringComparison.OrdinalIgnoreCase)))
             {
                 var property = track.Properties.FirstOrDefault(item =>
                     item.Info.FunctionName.Equals("Position", StringComparison.OrdinalIgnoreCase));
                 if (property?.ChildProperties is null) continue;
-                changed += SetCoordinate(property, "x", position.X);
-                changed += SetCoordinate(property, "y", position.Y);
+                changed += SetCoordinate(property, "x", marker.Position.X);
+                changed += SetCoordinate(property, "y", marker.Position.Y);
+
+                if (marker.Size is not Vector2 size) continue;
+                var sizeProperty = track.Properties.FirstOrDefault(item =>
+                    item.Info.FunctionName.Equals("Size", StringComparison.OrdinalIgnoreCase));
+                if (sizeProperty?.ChildProperties is null) continue;
+                changed += SetCoordinate(sizeProperty, "w", size.X);
+                changed += SetCoordinate(sizeProperty, "h", size.Y);
             }
         }
+        return changed;
+    }
+
+    private static int AlignGroupedDpadDefaults(GuiFile gui)
+    {
+        if (gui.RootView is null) return 0;
+
+        var groupedLayers = new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["t_btn_active0"] = LargeMarkers["DirL"].Position,
+            ["t_btn_active1"] = LargeMarkers["DirD"].Position,
+            ["t_btn_active2"] = LargeMarkers["DirU"].Position
+        };
+
+        var changed = 0;
+        foreach (var controllerName in new[] { "c_XB1", "c_PS4" })
+        {
+            var controller = FindDisplay(gui.RootView, controllerName);
+            if (controller is null) continue;
+
+            foreach (var pair in groupedLayers)
+            {
+                var display = FindDisplay(controller, pair.Key);
+                if (display is null) continue;
+                changed += SetPosition(display.Element.Attributes, pair.Value);
+                changed += SetPosition(display.Element.ExtraAttributes, pair.Value);
+            }
+        }
+
         return changed;
     }
 
@@ -195,23 +304,37 @@ internal static class Program
     private static int AlignSmall(GuiFile gui)
     {
         if (gui.RootView is null) throw new InvalidDataException("GUI root view was not found.");
-        var xbox = FindDisplay(gui.RootView, "c_XB1")
-            ?? throw new InvalidDataException("c_XB1 display was not found.");
+        var controllers = new[] { "c_XB1", "c_PS4" }
+            .Select(name => (Name: name, Display: FindDisplay(gui.RootView, name)))
+            .Where(item => item.Display is not null)
+            .ToArray();
+        if (controllers.Length == 0)
+            throw new InvalidDataException("Neither c_XB1 nor c_PS4 display was found.");
 
-        var changed = SetBoolean(xbox.Element.Attributes, "ResolutionAdjust", false);
-        foreach (var pair in SmallMarkers)
+        var changed = 0;
+        foreach (var controller in controllers)
         {
-            var display = FindDisplay(xbox, pair.Key);
-            if (display is null) continue;
-            changed += SetPosition(display.Element.Attributes, pair.Value.Position);
-            changed += SetPosition(display.Element.ExtraAttributes, pair.Value.Position);
-            changed += SetBoolean(display.Element.Attributes, "ResolutionAdjust", false);
+            var root = controller.Display!;
+            changed += SetBoolean(root.Element.Attributes, "ResolutionAdjust", false);
+            foreach (var pair in SmallMarkers)
+            {
+                var display = FindDisplay(root, pair.Key);
+                if (display is null) continue;
+                changed += SetPosition(display.Element.Attributes, pair.Value.Position);
+                changed += SetPosition(display.Element.ExtraAttributes, pair.Value.Position);
+                changed += SetBoolean(display.Element.Attributes, "ResolutionAdjust", false);
 
-            var targetPath = "/c_top/c_image/c_XB1/" + pair.Key + "/t_btn";
-            changed += SetOverride(gui, targetPath, "UVPatternNo", pair.Value.Pattern);
-            if (pair.Value.Size is Vector2 size)
-                changed += SetOverride(gui, targetPath, "Size",
-                    new ReeLib.via.Size { w = size.X, h = size.Y });
+                // The Void can switch between these two independent controller
+                // branches. Patching c_XB1 alone left c_PS4 at Capcom's old
+                // offsets, which is why only the right D-pad marker happened to
+                // line up in some modes while the other three moved differently.
+                var targetPath = "/c_top/c_image/" + controller.Name + "/" +
+                                 pair.Key + "/t_btn";
+                changed += SetOverride(gui, targetPath, "UVPatternNo", pair.Value.Pattern);
+                if (pair.Value.Size is Vector2 size)
+                    changed += SetOverride(gui, targetPath, "Size",
+                        new ReeLib.via.Size { w = size.X, h = size.Y });
+            }
         }
         return changed;
     }

@@ -1,6 +1,6 @@
 DMC5 DualSense Layer is an unofficial community modification for the Windows
 Steam version of Devil May Cry 5. It is not affiliated with, endorsed by, or
-supported by Capcom, Sony Interactive Entertainment, Valve, or Nefarius.
+supported by Capcom, Sony Interactive Entertainment, or Valve.
 
 Users must own a legitimate Steam copy of Devil May Cry 5. The installer does
 not include the game executable, saves, PAK payloads, or any mechanism for

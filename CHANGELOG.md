@@ -1,0 +1,84 @@
+# Changelog
+
+Only public version milestones are listed here. Internal calibration builds,
+discarded test packages, and one-off diagnostics are intentionally omitted.
+
+## 1.6.0 — Native C++ primary release
+
+- Reimplemented Launcher, Bridge, and the REFramework gameplay plugin in native
+  C++ while preserving the controller behavior accepted in 1.5.5.
+- Made the C++ package the recommended download; retained the self-contained C#
+  implementation as a compatibility fallback.
+- Removed the managed runtime from the primary package, reducing the ZIP from
+  roughly 96 MiB to roughly 15 MiB.
+- Kept Steam Input as the only gameplay-input owner. The native Bridge performs
+  output only: adaptive triggers, LED color, and ordinary rumble through
+  `SteamInput006`, plus four-channel WASAPI advanced haptics.
+- Kept Launcher and Bridge session-scoped. No service, startup entry, resident
+  watcher, direct HID input, virtual gamepad, ViGEm, or separate driver is used.
+- Added pinned native dependency preparation, deterministic native builds,
+  byte-identical archive checks, import auditing, and clean install/uninstall
+  smoke coverage.
+- Completed the pause-menu Display Controls diagram for every character and
+  both input families while retaining DMC5's dynamic labels and assignments.
+- Rebuilt the PlayStation prompt cells without stray edge pixels, refined the
+  Settings stick markers, and matched the active Circle marker to the native
+  Triangle/Cross/Square artwork.
+- Added bilingual primary/fallback installation guidance and Steam Community
+  guide drafts.
+
+## 1.5.5 — Stable Steam Input architecture
+
+- Changed the runtime from controller-input emulation to an output-only design.
+  Buttons, sticks, remapping, and touchpad input now stay entirely on DMC5's
+  normal Steam Input path.
+- Routed adaptive triggers, lightbar output, and ordinary rumble through Steam's
+  DualSense output API and removed the old input interception layer.
+- Made trigger placement depend only on the live DMC5 action bindings. Dante
+  and Blue Rose effects are applied to L2/R2 only when the corresponding action
+  is actually assigned there; face-button assignments leave the triggers free.
+- Made DMC5's final motor output authoritative for ordinary combat rumble and
+  retained the 180 ms watchdog that prevents vibration tails.
+- Kept synthetic hit/damage impulses out of the default `Authentic` profile;
+  they remain optional in `Enhanced`.
+- Completed controls-menu and The Void alignment for D-pad directions, grouped
+  D-pad, L1/L2/R1/R2, L3/R3, face buttons, Circle coloring, Options, and the
+  full touchpad marker across resolution changes.
+- Disabled heavy calibration/event logging by default and removed runtime log
+  spam from normal sessions.
+
+## 1.5.4 — Live binding and interface alignment
+
+- Replaced event-based trigger-side guessing with direct reads of DMC5's active
+  `AttackL` and `Special2` assignments.
+- Applied remaps immediately without restarting the game.
+- Moved controller art and active markers into a shared local coordinate system
+  so resolution changes scale them together.
+- Corrected compact PlayStation markers and expanded the touchpad marker.
+
+## 1.5.3 — Deterministic gameplay event routing
+
+- Filtered character-specific events to the active manual player, preventing
+  AI, doubles, and inactive objects from creating false feedback.
+- Distinguished Dante's Ebony and Ivory events from the live weapon selector.
+- Replaced failing per-frame member lookups with stable inherited getters.
+- Added safe in-place upgrades that preserve configuration and logs.
+
+## 1.5.2 — Steam launch cleanup
+
+- Hid the command window used by Steam to expand the `%command%` wrapper while
+  retaining game-session ownership and Bridge cleanup.
+
+## 1.5.1 — V detection and hidden runtime windows
+
+- Corrected V detection in The Void.
+- Changed Bridge to a windowless application and started REFramework with its
+  panel closed.
+
+## 1.5.0 — First public feature-complete package
+
+- Established the session Launcher/Bridge/plugin structure, reversible
+  installer, controller UI, adaptive-trigger profiles, character lightbar
+  colors, ordinary rumble, and the supported advanced-haptics event set.
+- Later releases replaced the original controller transport and should be used
+  instead of this legacy package.

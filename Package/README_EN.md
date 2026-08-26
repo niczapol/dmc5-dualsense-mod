@@ -1,7 +1,11 @@
-# DMC5 DualSense Layer 1.5.5
+# DMC5 DualSense Layer 1.6.0 — Managed C# fallback
 
-Unofficial native DualSense support for the Windows Steam version of Devil May
-Cry 5. The mod adds adaptive triggers, advanced haptics, character lightbar
+This is the compatibility fallback for PCs where the recommended native C++
+build does not start correctly. It implements the same controller behavior but
+contains a much larger self-contained managed runtime. Try the Native C++ ZIP
+from GitHub Releases first.
+
+The mod adds adaptive triggers, advanced haptics, character lightbar
 colors, PlayStation button prompts, and an aligned DualSense controller diagram.
 
 ## Features
@@ -24,6 +28,11 @@ colors, PlayStation button prompts, and an aligned DualSense controller diagram.
 
 Bluetooth cannot carry the four-channel audio stream used for advanced haptics,
 so the complete feature set requires USB.
+
+Standard DualSense CFI-ZCT1 and CFI-ZCT2 models use Steam's common PS5-controller
+type and do not require model-specific configuration. DualSense Edge is accepted
+by the same output and audio-endpoint detection paths, but its complete hardware
+matrix is not yet physically verified. Full feedback support is USB-only.
 
 ## Installation
 

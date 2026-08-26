@@ -32,9 +32,10 @@ function New-MockPak([string]$Path) {
         $writer.Write([uint32]0x414B504B)
         $writer.Write([uint16]4)
         $writer.Write([uint16]0)
-        $writer.Write([uint32]2)
+        $writer.Write([uint32]3)
         $writer.Write([uint32]0)
         foreach ($pair in @(
+            @([uint32]3412546084, [uint32]3766842389),
             @([uint32]1604417987, [uint32]163320100),
             @([uint32]1327091247, [uint32]808910760)
         )) {
@@ -91,9 +92,11 @@ try {
 
     $firstInvalidated = Read-PakPair $pakPath 0
     $secondInvalidated = Read-PakPair $pakPath 1
+    $thirdInvalidated = Read-PakPair $pakPath 2
     if ($firstInvalidated.Lower -ne 0 -or $firstInvalidated.Upper -ne 0 -or
-        $secondInvalidated.Lower -ne 0 -or $secondInvalidated.Upper -ne 0) {
-        throw 'The installer did not invalidate both expected GUI PAK entries.'
+        $secondInvalidated.Lower -ne 0 -or $secondInvalidated.Upper -ne 0 -or
+        $thirdInvalidated.Lower -ne 0 -or $thirdInvalidated.Upper -ne 0) {
+        throw 'The installer did not invalidate all three expected GUI PAK entries.'
     }
 
     $installedUninstaller = Join-Path $gameRoot 'DMC5DualSense\Uninstall.ps1'
@@ -101,9 +104,11 @@ try {
 
     $firstRestored = Read-PakPair $pakPath 0
     $secondRestored = Read-PakPair $pakPath 1
-    if ($firstRestored.Lower -ne 1604417987 -or $firstRestored.Upper -ne 163320100 -or
-        $secondRestored.Lower -ne 1327091247 -or $secondRestored.Upper -ne 808910760) {
-        throw 'The uninstaller did not restore both original GUI PAK entries.'
+    $thirdRestored = Read-PakPair $pakPath 2
+    if ($firstRestored.Lower -ne 3412546084 -or $firstRestored.Upper -ne 3766842389 -or
+        $secondRestored.Lower -ne 1604417987 -or $secondRestored.Upper -ne 163320100 -or
+        $thirdRestored.Lower -ne 1327091247 -or $thirdRestored.Upper -ne 808910760) {
+        throw 'The uninstaller did not restore all three original GUI PAK entries.'
     }
     if (Test-Path -LiteralPath $manifestPath) {
         throw 'install-manifest.json remained after uninstall.'
@@ -113,7 +118,7 @@ try {
         Package = $zipPath
         PackageSha256 = Get-Hash $zipPath
         InstalledFilesVerified = @($manifest.Files).Count
-        PakEntriesRestored = 2
+        PakEntriesRestored = 3
         GameLaunched = $false
         Result = 'PASS'
     } | ConvertTo-Json

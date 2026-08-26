@@ -23,6 +23,7 @@ internal static class Program
             return args[0].ToLowerInvariant() switch
             {
                 "build" => Build(args),
+                "patch-prompts" => PatchPrompts(args),
                 "patch-markers" => PatchMarkers(args),
                 "patch-bc7" => PatchBc7(args),
                 "tex-to-dds" => TexToDds(args),
@@ -34,6 +35,17 @@ internal static class Program
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static int PatchPrompts(string[] args)
+    {
+        if (args.Length != 3)
+            throw new ArgumentException(
+                "patch-prompts requires: <ui0010-atlas.png> <output.png>");
+
+        using var atlas = BuildPromptAtlas(LoadArgb(args[1]));
+        SavePng(atlas, Path.GetFullPath(args[2]));
+        return 0;
     }
 
     private static int Build(string[] args)
@@ -143,13 +155,13 @@ internal static class Program
                 Path.Combine(assets, "DualSense_L2-Active.png"));
             ReplaceMarker(atlas, new Rectangle(848, 256, 128, 64),
                 Path.Combine(assets, "DualSense_L1-Active.png"));
-            // Circle's source artwork fills its PNG edge-to-edge. Keep the UV
-            // cell at 64x64 but add transparent padding so its visible diameter
-            // matches the physical face button in the large controller image.
-            var circleCell = new Rectangle(912, 0, 64, 64);
-            ReplaceMarkerFit(atlas, circleCell,
-                Path.Combine(assets, "DualSense_Circle.png"), 0.82);
-            DrawCircleGlyph(atlas, circleCell);
+            // The top Settings set ships with a blank Circle fill, while the
+            // lower PlayStation set in the same atlas already has the exact
+            // clean Circle marker used alongside Triangle/Cross/Square. Copy
+            // that native cell 1:1 instead of drawing an approximate ellipse.
+            CopyMarkerCell(atlas,
+                new Rectangle(912, 468, 64, 64),
+                new Rectangle(912, 0, 64, 64));
         }
 
         var output = Path.GetFullPath(args[3]);
@@ -166,35 +178,15 @@ internal static class Program
         DrawPixelExact(graphics, scaled, uvCell.Location);
     }
 
-    private static void ReplaceMarkerFit(
-        Bitmap atlas, Rectangle uvCell, string assetPath, double fill = 1.0)
+    private static void CopyMarkerCell(
+        Bitmap atlas, Rectangle sourceCell, Rectangle destinationCell)
     {
-        using var asset = LoadArgb(assetPath);
-        var scale = Math.Min((double)uvCell.Width / asset.Width,
-                             (double)uvCell.Height / asset.Height) *
-                    Math.Clamp(fill, 0.1, 1.0);
-        var size = new Size(Math.Max(1, (int)Math.Round(asset.Width * scale)),
-                            Math.Max(1, (int)Math.Round(asset.Height * scale)));
-        using var scaled = Scale(asset, size);
-        var location = new Point(uvCell.Left + (uvCell.Width - size.Width) / 2,
-                                 uvCell.Top + (uvCell.Height - size.Height) / 2);
-        Clear(atlas, uvCell);
+        if (sourceCell.Size != destinationCell.Size)
+            throw new ArgumentException("Source and destination marker cells must have equal size.");
+        using var marker = atlas.Clone(sourceCell, PixelFormat.Format32bppArgb);
+        Clear(atlas, destinationCell);
         using var graphics = CreateGraphics(atlas);
-        DrawPixelExact(graphics, scaled, location);
-    }
-
-    private static void DrawCircleGlyph(Bitmap atlas, Rectangle uvCell)
-    {
-        // Match the pink/red PlayStation Circle glyph used by the working
-        // ui8013 (Void) marker while retaining the already calibrated outer
-        // highlight diameter in ui4002 (Settings).
-        using var graphics = CreateGraphics(atlas);
-        using var pen = new Pen(Color.FromArgb(255, 255, 153, 153), 3.5f);
-        graphics.DrawEllipse(pen,
-            uvCell.Left + 19.0f,
-            uvCell.Top + 19.0f,
-            26.0f,
-            26.0f);
+        DrawPixelExact(graphics, marker, destinationCell.Location);
     }
 
     private static int TexToDds(string[] args)
@@ -254,13 +246,318 @@ internal static class Program
         if (atlas.Width != 1024 || atlas.Height != 2048)
             throw new InvalidDataException($"ui0010 must be 1024x2048, got {atlas.Width}x{atlas.Height}.");
 
-        Clear(atlas, Rectangle.FromLTRB(312, 164, 480, 248));
-        using var options = DrawSystemButton(create: false);
-        using var create = DrawSystemButton(create: true);
+        // DMC5's stock 80x80 controller cells contain opaque cyan/white fringe
+        // pixels outside the actual prompts. They become especially obvious in
+        // Settings and the pause legend. Rebuild the complete controller block
+        // on transparent cells instead of trying to colour-key compressed BC7
+        // debris after the fact.
+        var cells = new Dictionary<Point, Bitmap>
+        {
+            [new(0, 0)] = DrawFaceButton(FaceGlyph.Cross),
+            [new(80, 0)] = DrawFaceButton(FaceGlyph.Circle),
+            [new(160, 0)] = DrawFaceButton(FaceGlyph.Square),
+            [new(240, 0)] = DrawFaceButton(FaceGlyph.Triangle),
+            [new(320, 0)] = DrawDpadPrompt(),
+
+            [new(0, 80)] = DrawDpadPrompt(Direction.Up),
+            [new(80, 80)] = DrawDpadPrompt(Direction.Down),
+            [new(160, 80)] = DrawDpadPrompt(Direction.Left),
+            [new(240, 80)] = DrawDpadPrompt(Direction.Right),
+            [new(320, 80)] = DrawDpadPrompt(Direction.Left | Direction.Right),
+            [new(400, 80)] = DrawDpadPrompt(Direction.Up | Direction.Down),
+
+            [new(0, 160)] = DrawStickPrompt("L"),
+            [new(80, 160)] = DrawStickPrompt("R"),
+            [new(160, 160)] = DrawShoulderPrompt("L1"),
+            [new(240, 160)] = DrawShoulderPrompt("R1"),
+            [new(320, 160)] = DrawSystemButton(create: false),
+            [new(400, 160)] = DrawTouchpadButton(),
+
+            [new(0, 240)] = DrawStickPrompt("L3"),
+            [new(80, 240)] = DrawStickPrompt("R3"),
+            [new(160, 240)] = DrawShoulderPrompt("L2", trigger: true),
+            [new(240, 240)] = DrawShoulderPrompt("R2", trigger: true),
+
+            [new(0, 320)] = DrawStickPrompt("L", Direction.Left | Direction.Right),
+            [new(80, 320)] = DrawStickPrompt("L", Direction.Up | Direction.Down),
+            [new(160, 320)] = DrawStickPrompt("L", Direction.Down),
+            [new(240, 320)] = DrawStickPrompt("R", Direction.Down),
+            [new(320, 320)] = DrawStickPrompt("L", Direction.Up),
+            [new(400, 320)] = DrawStickPrompt("R", Direction.Up),
+
+            [new(0, 400)] = DrawStickPrompt("R", Direction.Left | Direction.Right),
+            [new(80, 400)] = DrawStickPrompt("R", Direction.Up | Direction.Down),
+            [new(160, 400)] = DrawStickPrompt("L", Direction.Left),
+            [new(240, 400)] = DrawStickPrompt("L", Direction.Right),
+            [new(320, 400)] = DrawStickPrompt("R", Direction.Left),
+            [new(400, 400)] = DrawStickPrompt("R", Direction.Right)
+        };
+
         using var graphics = CreateGraphics(atlas);
-        DrawPixelExact(graphics, options, new Point(320, 168));
-        DrawPixelExact(graphics, create, new Point(400, 168));
+        foreach (var pair in cells)
+        {
+            Clear(atlas, new Rectangle(pair.Key, new Size(80, 80)));
+            DrawPixelExact(graphics, pair.Value, pair.Key);
+            pair.Value.Dispose();
+        }
         return atlas;
+    }
+
+    [Flags]
+    private enum Direction
+    {
+        None = 0,
+        Up = 1,
+        Down = 2,
+        Left = 4,
+        Right = 8
+    }
+
+    private enum FaceGlyph
+    {
+        Cross,
+        Circle,
+        Square,
+        Triangle
+    }
+
+    private static Bitmap DrawFaceButton(FaceGlyph glyph)
+    {
+        return DrawPromptCell((graphics, scale) =>
+        {
+            DrawRoundPromptBase(graphics, scale,
+                new Rectangle(9 * scale, 9 * scale, 62 * scale, 62 * scale));
+            var colour = glyph switch
+            {
+                FaceGlyph.Cross => Color.FromArgb(255, 126, 161, 222),
+                FaceGlyph.Circle => Color.FromArgb(255, 230, 67, 105),
+                FaceGlyph.Square => Color.FromArgb(255, 213, 142, 190),
+                FaceGlyph.Triangle => Color.FromArgb(255, 165, 203, 169),
+                _ => Color.White
+            };
+            using var pen = new Pen(colour, 3.0f * scale)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            switch (glyph)
+            {
+                case FaceGlyph.Cross:
+                    graphics.DrawLine(pen, 27 * scale, 27 * scale, 53 * scale, 53 * scale);
+                    graphics.DrawLine(pen, 53 * scale, 27 * scale, 27 * scale, 53 * scale);
+                    break;
+                case FaceGlyph.Circle:
+                    graphics.DrawEllipse(pen, 25 * scale, 25 * scale, 30 * scale, 30 * scale);
+                    break;
+                case FaceGlyph.Square:
+                    graphics.DrawRectangle(pen, 27 * scale, 27 * scale, 26 * scale, 26 * scale);
+                    break;
+                case FaceGlyph.Triangle:
+                    using (var path = new GraphicsPath())
+                    {
+                        path.AddPolygon(
+                        [
+                            new PointF(40 * scale, 24 * scale),
+                            new PointF(56 * scale, 54 * scale),
+                            new PointF(24 * scale, 54 * scale)
+                        ]);
+                        graphics.DrawPath(pen, path);
+                    }
+                    break;
+            }
+        });
+    }
+
+    private static Bitmap DrawDpadPrompt(Direction selected = Direction.None)
+    {
+        return DrawPromptCell((graphics, scale) =>
+        {
+            using var fill = new SolidBrush(Color.FromArgb(255, 28, 29, 31));
+            using var rim = new Pen(Color.FromArgb(255, 57, 62, 64), 1.5f * scale)
+            {
+                LineJoin = LineJoin.Round
+            };
+            foreach (var direction in new[] { Direction.Up, Direction.Down, Direction.Left, Direction.Right })
+            {
+                using var path = DpadArm(direction, scale);
+                graphics.FillPath(fill, path);
+                graphics.DrawPath(rim, path);
+            }
+
+            using var hub = new SolidBrush(Color.FromArgb(255, 39, 42, 45));
+            graphics.FillEllipse(hub, 35 * scale, 35 * scale, 10 * scale, 10 * scale);
+            foreach (var direction in new[] { Direction.Up, Direction.Down, Direction.Left, Direction.Right })
+                if (selected.HasFlag(direction)) DrawArrow(graphics, scale, direction, insideDpad: true);
+        });
+    }
+
+    private static GraphicsPath DpadArm(Direction direction, int scale)
+    {
+        PointF[] points = direction switch
+        {
+            Direction.Up =>
+            [
+                new(32 * scale, 36 * scale), new(32 * scale, 18 * scale),
+                new(40 * scale, 10 * scale), new(48 * scale, 18 * scale),
+                new(48 * scale, 36 * scale)
+            ],
+            Direction.Down =>
+            [
+                new(32 * scale, 44 * scale), new(48 * scale, 44 * scale),
+                new(48 * scale, 62 * scale), new(40 * scale, 70 * scale),
+                new(32 * scale, 62 * scale)
+            ],
+            Direction.Left =>
+            [
+                new(36 * scale, 32 * scale), new(36 * scale, 48 * scale),
+                new(18 * scale, 48 * scale), new(10 * scale, 40 * scale),
+                new(18 * scale, 32 * scale)
+            ],
+            Direction.Right =>
+            [
+                new(44 * scale, 32 * scale), new(62 * scale, 32 * scale),
+                new(70 * scale, 40 * scale), new(62 * scale, 48 * scale),
+                new(44 * scale, 48 * scale)
+            ],
+            _ => throw new ArgumentOutOfRangeException(nameof(direction))
+        };
+        var path = new GraphicsPath();
+        path.AddPolygon(points);
+        path.CloseFigure();
+        return path;
+    }
+
+    private static Bitmap DrawShoulderPrompt(string label, bool trigger = false)
+    {
+        return DrawPromptCell((graphics, scale) =>
+        {
+            using var fill = new SolidBrush(Color.FromArgb(255, 29, 30, 32));
+            using var rim = new Pen(Color.FromArgb(255, 83, 88, 88), 1.75f * scale);
+            var bounds = trigger
+                ? new Rectangle(12 * scale, 19 * scale, 56 * scale, 42 * scale)
+                : new Rectangle(9 * scale, 24 * scale, 62 * scale, 32 * scale);
+            graphics.FillRoundedRectangle(fill, bounds, (trigger ? 9 : 7) * scale);
+            graphics.DrawRoundedRectangle(rim, bounds, (trigger ? 9 : 7) * scale);
+            DrawPromptText(graphics, scale, label, trigger ? 19.0f : 20.0f,
+                new RectangleF(8 * scale, 15 * scale, 64 * scale, 50 * scale));
+        });
+    }
+
+    private static Bitmap DrawStickPrompt(string label, Direction arrows = Direction.None)
+    {
+        return DrawPromptCell((graphics, scale) =>
+        {
+            var hasArrows = arrows != Direction.None;
+            var bounds = hasArrows
+                ? new Rectangle(13 * scale, 13 * scale, 54 * scale, 54 * scale)
+                : new Rectangle(9 * scale, 9 * scale, 62 * scale, 62 * scale);
+            DrawRoundPromptBase(graphics, scale, bounds);
+            DrawPromptText(graphics, scale, label, label.Length > 1 ? 17.0f : 23.0f,
+                new RectangleF(bounds.X, bounds.Y - 1 * scale, bounds.Width, bounds.Height));
+            foreach (var direction in new[] { Direction.Up, Direction.Down, Direction.Left, Direction.Right })
+                if (arrows.HasFlag(direction)) DrawArrow(graphics, scale, direction, insideDpad: false);
+        });
+    }
+
+    private static void DrawRoundPromptBase(Graphics graphics, int scale, Rectangle bounds)
+    {
+        using var fill = new SolidBrush(Color.FromArgb(255, 28, 29, 31));
+        using var rim = new Pen(Color.FromArgb(255, 69, 74, 75), 2.0f * scale);
+        graphics.FillEllipse(fill, bounds);
+        graphics.DrawEllipse(rim, bounds);
+    }
+
+    private static void DrawPromptText(
+        Graphics graphics, int scale, string text, float pointSize, RectangleF bounds)
+    {
+        using var font = new Font(FontFamily.GenericSansSerif, pointSize * scale,
+            FontStyle.Regular, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(Color.FromArgb(255, 198, 199, 190));
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoWrap
+        };
+        graphics.DrawString(text, font, brush, bounds, format);
+    }
+
+    private static void DrawArrow(Graphics graphics, int scale, Direction direction, bool insideDpad)
+    {
+        var centre = insideDpad
+            ? direction switch
+            {
+                Direction.Up => new PointF(40 * scale, 23 * scale),
+                Direction.Down => new PointF(40 * scale, 57 * scale),
+                Direction.Left => new PointF(23 * scale, 40 * scale),
+                Direction.Right => new PointF(57 * scale, 40 * scale),
+                _ => PointF.Empty
+            }
+            : direction switch
+            {
+                Direction.Up => new PointF(40 * scale, 7 * scale),
+                Direction.Down => new PointF(40 * scale, 73 * scale),
+                Direction.Left => new PointF(7 * scale, 40 * scale),
+                Direction.Right => new PointF(73 * scale, 40 * scale),
+                _ => PointF.Empty
+            };
+        var radius = (insideDpad ? 6.0f : 5.0f) * scale;
+        PointF[] points = direction switch
+        {
+            Direction.Up =>
+            [new(centre.X, centre.Y - radius), new(centre.X - radius, centre.Y + radius),
+             new(centre.X + radius, centre.Y + radius)],
+            Direction.Down =>
+            [new(centre.X, centre.Y + radius), new(centre.X - radius, centre.Y - radius),
+             new(centre.X + radius, centre.Y - radius)],
+            Direction.Left =>
+            [new(centre.X - radius, centre.Y), new(centre.X + radius, centre.Y - radius),
+             new(centre.X + radius, centre.Y + radius)],
+            Direction.Right =>
+            [new(centre.X + radius, centre.Y), new(centre.X - radius, centre.Y - radius),
+             new(centre.X - radius, centre.Y + radius)],
+            _ => []
+        };
+        using var brush = new SolidBrush(Color.FromArgb(255, 187, 188, 179));
+        graphics.FillPolygon(brush, points);
+    }
+
+    private static Bitmap DrawPromptCell(Action<Graphics, int> draw)
+    {
+        const int scale = 4;
+        using var highResolution = new Bitmap(80 * scale, 80 * scale, PixelFormat.Format32bppArgb);
+        using (var graphics = CreateGraphics(highResolution)) draw(graphics, scale);
+        var result = new Bitmap(80, 80, PixelFormat.Format32bppArgb);
+        using var output = CreateGraphics(result);
+        output.DrawImage(highResolution, new Rectangle(0, 0, 80, 80));
+        CleanTransparentFringe(result);
+        return result;
+    }
+
+    private static Bitmap DrawTouchpadButton()
+    {
+        const int scale = 4;
+        using var highResolution = new Bitmap(80 * scale, 80 * scale, PixelFormat.Format32bppArgb);
+        using (var graphics = CreateGraphics(highResolution))
+        using (var cyan = new Pen(Color.FromArgb(255, 112, 216, 228), 2 * scale))
+        using (var light = new Pen(Color.FromArgb(255, 202, 207, 207), 1 * scale))
+        using (var dark = new SolidBrush(Color.FromArgb(255, 31, 31, 34)))
+        {
+            var pad = new Rectangle(8 * scale, 20 * scale, 64 * scale, 40 * scale);
+            graphics.FillRoundedRectangle(dark, pad, 8 * scale);
+            graphics.DrawRoundedRectangle(cyan, pad, 8 * scale);
+            // A restrained inner top edge makes the horizontal touch surface
+            // readable at the game's small prompt size without resembling
+            // either Create or Options.
+            graphics.DrawLine(light, 17 * scale, 26 * scale, 63 * scale, 26 * scale);
+        }
+
+        var result = new Bitmap(80, 80, PixelFormat.Format32bppArgb);
+        using var output = CreateGraphics(result);
+        output.DrawImage(highResolution, new Rectangle(0, 0, 80, 80));
+        CleanTransparentFringe(result);
+        return result;
     }
 
     private static Bitmap DrawSystemButton(bool create)
@@ -297,7 +594,39 @@ internal static class Program
         var result = new Bitmap(80, 80, PixelFormat.Format32bppArgb);
         using var output = CreateGraphics(result);
         output.DrawImage(highResolution, new Rectangle(0, 0, 80, 80));
+        CleanTransparentFringe(result);
         return result;
+    }
+
+    private static void CleanTransparentFringe(Bitmap bitmap, byte alphaCutoff = 24)
+    {
+        // GDI+ retains RGB values on nearly transparent antialias samples.
+        // BC7 may promote those samples into visible coloured pinpricks. Drop
+        // only the imperceptible tail and zero its RGB channels before encode;
+        // the useful antialiased edge above the cutoff remains intact.
+        var rectangle = new Rectangle(Point.Empty, bitmap.Size);
+        var data = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite,
+            PixelFormat.Format32bppArgb);
+        try
+        {
+            var bytes = new byte[Math.Abs(data.Stride) * data.Height];
+            Marshal.Copy(data.Scan0, bytes, 0, bytes.Length);
+            for (var y = 0; y < data.Height; y++)
+            for (var x = 0; x < data.Width; x++)
+            {
+                var offset = y * data.Stride + x * 4;
+                if (bytes[offset + 3] >= alphaCutoff) continue;
+                bytes[offset] = 0;
+                bytes[offset + 1] = 0;
+                bytes[offset + 2] = 0;
+                bytes[offset + 3] = 0;
+            }
+            Marshal.Copy(bytes, 0, data.Scan0, bytes.Length);
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
     }
 
     private static Bitmap BuildControllerAtlas(
@@ -492,6 +821,7 @@ internal static class Program
         Console.Error.WriteLine(
             "Usage:\n" +
             "  build <controller.png> <ui0010-base.png> <ui4002-base.png> <ui8013-base.png> <output-dir>\n" +
+            "  patch-prompts <ui0010-atlas.png> <output.png>\n" +
             "  patch-markers <controller-atlas.png> <dualsense-assets-directory> <output.png>\n" +
             "  patch-bc7 <base.tex> <encoded.dds> <output.tex> <left,top,right,bottom> [...]\n" +
             "  tex-to-dds <template.dds> <input.tex> <output.dds>");

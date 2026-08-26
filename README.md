@@ -1,72 +1,108 @@
 # DMC5 DualSense
 
-Native DualSense support layer for the Steam version of Devil May Cry 5.
+[English](README.md) | [Русский](README_RU.md)
 
-The mod brings the PS5 controller experience to PC, including adaptive
-triggers, advanced haptics, character lightbar colors, PlayStation button
-prompts, and an aligned DualSense diagram in the controls menu and The Void.
-It supports the complete PS5-style controller event set implemented by the mod
-for Nero, Dante, V, and Vergil, together with the game's ordinary combat rumble.
+Full DualSense support for the Windows Steam version of Devil May Cry 5:
+adaptive triggers, advanced haptics, ordinary combat rumble, character
+lightbar colors, PlayStation prompts, and aligned DualSense diagrams in the
+controls menu and The Void.
 
-Normal gameplay starts directly from Steam after installation. Command files
-are used only for installation, removal, and optional diagnostics.
+## Which download should I use?
+
+| Build | Recommendation | Extra installation |
+| --- | --- | --- |
+| **Native C++** | **Use this first.** Small, fast, and the primary supported build. | None |
+| Managed C# fallback | Try this only if the native build does not start correctly on your PC. It implements the same controller behavior but has a much larger self-contained runtime. | None |
+
+Download both builds from [GitHub Releases](https://github.com/niczapol/dmc5-dualsense-mod/releases).
+Do not install both at once. Running either installer over the other performs a
+safe replacement while preserving user configuration and logs.
 
 ## Features
 
-- adaptive-trigger behavior matching the PS5 version;
-- advanced haptic feedback for supported character and weapon events;
-- ordinary DMC5 combat rumble through the DualSense actuators;
+- adaptive-trigger behavior based on the live DMC5 controller bindings;
+- advanced haptic feedback for supported Nero, Dante, and Vergil events;
+- DMC5's ordinary combat rumble for every playable character, including V;
 - character-specific lightbar colors;
-- PlayStation prompts and a correctly aligned DualSense controller diagram;
-- native Steam Input for buttons, sticks, remapping, and touchpad input;
-- automatic startup and shutdown with the normal Steam Play button;
-- reversible installation with backups and file verification.
+- PlayStation prompts and correctly aligned DualSense diagrams;
+- stable touchpad, buttons, sticks, and remapping through normal Steam Input;
+- hidden, session-only launcher and bridge that exit with the game;
+- reversible installation with backups, hashes, and exact PAK rollback.
 
-## Repository layout
+## Requirements
 
-- `Plugin/` — in-game REFramework plugin.
-- `Bridge/` — session-only DualSense output and haptics bridge.
-- `Launcher/` — hidden Steam session launcher.
-- `Package/` — installer, uninstaller, configuration, and user guides.
-- `Tests/` — deterministic controller and trigger-mapping tests.
-- `Tools/` — reproducible release and UI build tools.
+- Windows 10 or 11, x64;
+- a legitimate Steam copy of Devil May Cry 5;
+- a DualSense connected over USB;
+- Steam Input enabled or left at the game's default setting.
 
-## Install a release
+USB is required for the four-channel audio endpoint used by advanced haptics.
+Close PlayStation Accessories, DS4Windows, DualSenseX, and similar controller
+utilities while playing.
 
-Download the current Windows ZIP from [GitHub Releases](https://github.com/niczapol/dmc5-dualsense-mod/releases),
-extract it, and run `INSTALL-DMC5-DualSense.cmd`. The installer locates the
-Steam game, keeps normal controller input on Steam Input,
-installs the required runtime components, and copies the Steam launch command
-to the clipboard.
+Standard DualSense CFI-ZCT1 and CFI-ZCT2 models are supported through Steam's
+PS5-controller abstraction, so the mod does not depend on a particular internal
+hardware revision or USB product ID. DualSense Edge is recognized by the same
+output path and by the audio-endpoint matcher, but it has not yet completed our
+physical-controller test matrix. Full feedback support remains USB-only.
 
-The complete feature set requires Windows 10/11, a legitimate Steam copy, and
-a DualSense connected over USB. Steam Input must remain enabled/default for DMC5. See the
-[English guide](Package/README_EN.md) or [Russian guide](Package/README_RU.md).
+## Installation
 
-## Reproducible release build
+1. Download the **Native C++** ZIP from the latest GitHub release.
+2. Extract the complete ZIP to a normal writable folder.
+3. Close DMC5 and run `INSTALL-DMC5-DualSense.cmd`.
+4. Leave Steam Input enabled/default for DMC5.
+5. Paste the command copied by the installer into
+   `Steam → Devil May Cry 5 → Properties → Launch Options`.
+6. Connect the controller by USB and start the game normally with Steam's Play
+   button.
 
-The runtime code and pinned public dependencies build reproducibly from this
-repository. Final packaging also needs the separately supplied UI and haptic
-media inputs listed in `release-assets.json`; the builder verifies every input
-by exact size and SHA-256 before it does any work. Those media files are not
-stored in the source repository.
+If the native build does not start correctly, download the **Managed C#
+fallback** ZIP and run its installer in the same way. No separate .NET
+installation is needed because the fallback archive includes its runtime.
 
-The release builder runs the deterministic test suite, publishes self-contained
-Windows executables, writes a complete per-file manifest, and creates a
-deterministic ZIP with `CHECKSUMS.txt`. Players installing that finished ZIP do
-not need .NET, ViGEmBus, a virtual-controller driver, or any build tools.
+See the detailed [English guide](Native/Package/README_EN.md),
+[Russian guide](Native/Package/README_RU.md), and [changelog](CHANGELOG.md).
 
-On Windows with .NET 10 installed:
+## Runtime design
+
+Steam Input is the only owner of gameplay input: buttons, sticks, remapping,
+and the physical touchpad. The mod does not capture controller input or create a
+virtual gamepad. Its session bridge sends adaptive-trigger effects, LED color,
+and ordinary rumble through Steam's DualSense output API, while four-channel
+WASAPI carries advanced haptics. There is no service, startup entry, resident
+watcher, or background process after DMC5 exits.
+
+## Reproducible builds
+
+The primary C++ build uses pinned LLVM-MinGW and REFramework headers:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Tools\Build-Release.ps1
+powershell -ExecutionPolicy Bypass -File .\Native\Prepare-Dependencies.ps1
+powershell -ExecutionPolicy Bypass -File .\Native\build-package.ps1 -Version 1.6.0
 ```
 
-GitHub Actions independently compiles the public projects and runs the
-trigger-mapping and Steam output-payload tests on every push and pull request.
+The C# fallback remains buildable with the .NET 10 SDK:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Tools\Build-Release.ps1 `
+  -Version 1.6.0
+```
+
+Final packaging needs the separately supplied UI and haptic media listed in
+`release-assets.json`; every input is verified by exact size and SHA-256. The
+finished player archives are self-contained and require no .NET installation,
+ViGEm, virtual-controller driver, or build tools.
+
+## Community guides
+
+Drafts for the planned Steam Community guides are kept in
+[English](docs/steam/STEAM_GUIDE_EN.md) and
+[Russian](docs/steam/STEAM_GUIDE_RU.md). Screenshots will be added from the
+final native release in-game.
 
 ## Disclaimer
 
 This is an unofficial community mod and is not affiliated with Capcom, Sony,
-or Valve. It requires the user's own Steam copy of Devil May Cry 5.
-The project does not include the game executable, saves, or any DRM bypass.
+or Valve. It requires the user's own Steam copy of Devil May Cry 5 and does not
+include the game executable, saves, or any DRM bypass.

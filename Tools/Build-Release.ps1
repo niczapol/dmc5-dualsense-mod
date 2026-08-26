@@ -171,7 +171,7 @@ if ($LASTEXITCODE -ne 0) { throw "Bridge publish failed with code $LASTEXITCODE.
     -p:PublishSingleFile=true -p:DebugType=embedded -o $launcherPublish
 if ($LASTEXITCODE -ne 0) { throw "Launcher publish failed with code $LASTEXITCODE." }
 
-$stageRoot = Join-Path $outputRoot ("DMC5DualSense-v" + $Version)
+$stageRoot = Join-Path $outputRoot ("DMC5DualSense-Managed-" + $Version)
 New-Item -ItemType Directory -Path $stageRoot | Out-Null
 
 $trackedPackageFiles = & git -C $repoRoot ls-files -- 'Package'
@@ -246,7 +246,7 @@ $releaseManifest = [ordered]@{
 $releaseJson = $releaseManifest | ConvertTo-Json -Depth 6
 Write-Utf8NoBom (Join-Path $stageRoot 'release-manifest.json') ($releaseJson + "`n")
 
-$zipName = "DMC5DualSense-v$Version-win-x64.zip"
+$zipName = "DMC5DualSense-Managed-$Version-win-x64.zip"
 $zipPath = Join-Path $outputRoot $zipName
 New-DeterministicZip $stageRoot $zipPath
 $zipHash = Get-ExactHash $zipPath

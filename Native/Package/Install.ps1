@@ -5,7 +5,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.5.5-steam-input-output'
+$packageVersion = '1.6.0-native'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {
@@ -196,6 +196,8 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
     throw 'Сначала закройте Devil May Cry 5.'
 }
 
+$dependencies = Join-Path $PSScriptRoot 'Dependencies'
+
 $modDir = Join-Path $resolvedGameDir 'DMC5DualSense'
 $manifestPath = Join-Path $modDir 'install-manifest.json'
 if (Test-Path -LiteralPath $manifestPath) {
@@ -234,16 +236,14 @@ if (Test-Path -LiteralPath $modDir -PathType Container) {
     }
 }
 
-$dependencies = Join-Path $PSScriptRoot 'Dependencies'
 $frameworkZip = Join-Path $dependencies 'REFramework.zip'
-$csharpZip = Join-Path $dependencies 'csharp-api.zip'
 $uiRoot = Join-Path $PSScriptRoot 'UI'
+$hapticsRoot = Join-Path $PSScriptRoot 'Haptics'
 foreach ($required in @(
     $frameworkZip,
-    $csharpZip,
     (Join-Path $PSScriptRoot 'DMC5DualSense.Bridge.exe'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.Launcher.exe'),
-    (Join-Path $PSScriptRoot 'DMC5DualSense.cs'),
+    (Join-Path $PSScriptRoot 'DMC5DualSense.dll'),
     (Join-Path $PSScriptRoot 'Test-DualSense.ps1'),
     (Join-Path $PSScriptRoot 'TEST-DualSense.cmd'),
     (Join-Path $PSScriptRoot 'Uninstall.ps1'),
@@ -252,6 +252,18 @@ foreach ($required in @(
     (Join-Path $PSScriptRoot 'README_EN.md'),
     (Join-Path $PSScriptRoot 'NOTICE.txt'),
     (Join-Path $PSScriptRoot 'BUILD_INFO.txt'),
+    (Join-Path $hapticsRoot '1040252522.wav'),
+    (Join-Path $hapticsRoot '193630586.wav'),
+    (Join-Path $hapticsRoot '297926011.wav'),
+    (Join-Path $hapticsRoot '310261087.wav'),
+    (Join-Path $hapticsRoot '317387691.wav'),
+    (Join-Path $hapticsRoot '511441928.wav'),
+    (Join-Path $hapticsRoot '564764444.wav'),
+    (Join-Path $hapticsRoot '683314104.wav'),
+    (Join-Path $hapticsRoot '726668428.wav'),
+    (Join-Path $hapticsRoot '748704802.wav'),
+    (Join-Path $hapticsRoot '752139616.wav'),
+    (Join-Path $hapticsRoot '87828053.wav'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui0000\tex\ui0010_iam.tex.11.x64'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui3100\gui\ui3109.gui.270020'),
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui4000\gui\ui4002.gui.270020'),
@@ -267,15 +279,14 @@ foreach ($required in @(
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('DMC5DualSense-' + [Guid]::NewGuid().ToString('N'))
 $backupRoot = Join-Path $modDir 'backup'
 $records = [Collections.Generic.List[object]]::new()
+$removedRecords = [Collections.Generic.List[object]]::new()
 $createdDirectories = [Collections.Generic.List[string]]::new()
 $pakInvalidations = [Collections.Generic.List[object]]::new()
 
 try {
     New-Item -ItemType Directory -Path $temporary | Out-Null
     $frameworkExtract = Join-Path $temporary 'framework'
-    $csharpExtract = Join-Path $temporary 'csharp'
     Expand-Archive -LiteralPath $frameworkZip -DestinationPath $frameworkExtract
-    Expand-Archive -LiteralPath $csharpZip -DestinationPath $csharpExtract
 
     $incomingDinput = Get-ChildItem -LiteralPath $frameworkExtract -Filter 'dinput8.dll' -Recurse | Select-Object -First 1
     if (-not $incomingDinput) { throw 'В REFramework.zip не найден dinput8.dll.' }
@@ -319,26 +330,39 @@ try {
         })
     }
 
+    function Remove-LegacyFile([string]$Target) {
+        if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) { return }
+
+        $relative = Get-RelativePath $resolvedGameDir $Target
+        $backupRelative = Join-Path 'backup\removed' $relative
+        $backupPath = Join-Path $modDir $backupRelative
+        New-Item -ItemType Directory -Path (Split-Path $backupPath) -Force | Out-Null
+        Copy-Item -LiteralPath $Target -Destination $backupPath -Force
+        $removedRecords.Add([pscustomobject]@{
+            RelativePath = $relative
+            BackupRelativePath = $backupRelative
+            OriginalSha256 = (Get-FileHash -LiteralPath $Target -Algorithm SHA256).Hash
+        })
+        Remove-Item -LiteralPath $Target -Force
+    }
+
     Install-OneFile $incomingDinput.FullName $targetDinput
 
     # REFramework defaults to an open overlay. MenuOpen is applied only when
     # RememberMenuState is enabled, so setting MenuOpen=false by itself does not
     # suppress the panel. Preserve the user's complete file through the normal
-    # installer backup, enable loose GUI/texture overrides without verbose
-    # per-file logging, and keep REFramework headless at startup.
+    # installer backup, enable the two loaders required by the texture and GUI
+    # overrides, and change only the headless-startup keys.
     $refConfigTarget = Join-Path $resolvedGameDir 're2_fw_config.txt'
     $refConfigSource = Join-Path $temporary 're2_fw_config.txt'
-    # Do not assign an empty List through a PowerShell expression: an empty
-    # enumerable produces no pipeline output and becomes $null on a clean game
-    # directory. Construct the list first, then populate it explicitly.
     $refConfigLines = [Collections.Generic.List[string]]::new()
     if (Test-Path -LiteralPath $refConfigTarget -PathType Leaf) {
-        $refConfigLines.AddRange([string[]](Get-Content -LiteralPath $refConfigTarget))
+        foreach ($line in Get-Content -LiteralPath $refConfigTarget) {
+            $refConfigLines.Add([string]$line)
+        }
     }
     foreach ($setting in ([ordered]@{
         LooseFileLoader_Enabled = 'true'
-        LooseFileLoader_LogAccessedFiles = 'false'
-        LooseFileLoader_LogLooseFiles = 'false'
         LooseTextureLoader_Enabled = 'true'
         REFrameworkConfig_MenuOpen = 'false'
         REFrameworkConfig_RememberMenuState = 'true'
@@ -358,14 +382,13 @@ try {
     [IO.File]::WriteAllLines($refConfigSource, $refConfigLines, [Text.UTF8Encoding]::new($false))
     Install-OneFile $refConfigSource $refConfigTarget
 
-    $csharpRoot = Join-Path $csharpExtract 'reframework'
-    foreach ($source in Get-ChildItem -LiteralPath $csharpRoot -File -Recurse) {
-        $relative = Get-RelativePath $csharpRoot $source.FullName
-        Install-OneFile $source.FullName (Join-Path (Join-Path $resolvedGameDir 'reframework') $relative)
-    }
-
     Install-OneFile (Join-Path $PSScriptRoot 'DMC5DualSense.Bridge.exe') (Join-Path $modDir 'DMC5DualSense.Bridge.exe')
     Install-OneFile (Join-Path $PSScriptRoot 'DMC5DualSense.Launcher.exe') (Join-Path $modDir 'DMC5DualSense.Launcher.exe')
+    # The old managed prototype used this source plugin. Leaving it beside the
+    # native plugin can load two implementations of the same telemetry bridge.
+    # Back it up and disable it for the lifetime of this installation.
+    Remove-LegacyFile (Join-Path $resolvedGameDir 'reframework\plugins\source\DMC5DualSense.cs')
+    Install-OneFile (Join-Path $PSScriptRoot 'DMC5DualSense.dll') (Join-Path $resolvedGameDir 'reframework\plugins\DMC5DualSense.dll')
     Install-OneFile (Join-Path $PSScriptRoot 'Test-DualSense.ps1') (Join-Path $modDir 'Test-DualSense.ps1')
     Install-OneFile (Join-Path $PSScriptRoot 'TEST-DualSense.cmd') (Join-Path $modDir 'TEST-DualSense.cmd')
     Install-OneFile (Join-Path $PSScriptRoot 'Uninstall.ps1') (Join-Path $modDir 'Uninstall.ps1')
@@ -383,7 +406,9 @@ try {
         Install-OneFile (Join-Path $PSScriptRoot 'config.json') $configTarget
     }
 
-    Install-OneFile (Join-Path $PSScriptRoot 'DMC5DualSense.cs') (Join-Path $resolvedGameDir 'reframework\plugins\source\DMC5DualSense.cs')
+    foreach ($source in Get-ChildItem -LiteralPath $hapticsRoot -Filter '*.wav' -File) {
+        Install-OneFile $source.FullName (Join-Path (Join-Path $modDir 'Haptics') $source.Name)
+    }
 
     foreach ($source in Get-ChildItem -LiteralPath $uiRoot -File -Recurse) {
         $relative = Get-RelativePath $uiRoot $source.FullName
@@ -422,16 +447,18 @@ try {
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
         Files = $records
+        RemovedFiles = $removedRecords
         CreatedDirectories = $createdDirectories
         PakInvalidations = $pakInvalidations
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
     Write-Host ''
-    Write-Host 'DMC5 DualSense Layer установлен.' -ForegroundColor Green
+    Write-Host 'DMC5 DualSense Layer Native C++ установлен.' -ForegroundColor Green
     Write-Host "Игра: $resolvedGameDir"
     Write-Host 'Bridge запускается только на время DMC5 и закрывается вместе с игрой.'
     Write-Host 'Ввод и тачпад остаются штатному Steam Input; Bridge отправляет только отклик DualSense.'
+    Write-Host 'Для работы мода не нужны .NET, ViGEm, виртуальный геймпад или отдельный драйвер.'
     Write-Host 'Для DMC5 оставьте Steam Input включённым или выберите «Использовать настройки по умолчанию».' -ForegroundColor Yellow
     Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
     $steamLaunchCommand = '"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%'
@@ -458,6 +485,15 @@ catch {
             if (Test-Path -LiteralPath $backup) { Copy-Item -LiteralPath $backup -Destination $target -Force }
         } elseif (Test-Path -LiteralPath $target) {
             Remove-Item -LiteralPath $target -Force
+        }
+    }
+    foreach ($record in @($removedRecords)) {
+        $target = Join-Path $resolvedGameDir $record.RelativePath
+        $backup = Join-Path $modDir $record.BackupRelativePath
+        if (-not (Test-Path -LiteralPath $target) -and
+            (Test-Path -LiteralPath $backup -PathType Leaf)) {
+            New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
+            Copy-Item -LiteralPath $backup -Destination $target -Force
         }
     }
     throw

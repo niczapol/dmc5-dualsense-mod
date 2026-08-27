@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.6.0 — Managed C# fallback
+# DMC5 DualSense Layer 1.7.0 — Managed C# fallback
 
 This is the compatibility fallback for PCs where the recommended native C++
 build does not start correctly. It implements the same controller behavior but
@@ -37,6 +37,11 @@ type and do not require model-specific configuration. DualSense Edge is accepted
 by the same output and audio-endpoint detection paths, but its complete hardware
 matrix is not yet physically verified. Full feedback support is USB-only.
 
+The haptics endpoint is selected primarily from its Sony USB hardware identity
+and four-channel format, not from the visible Windows device name. Localized or
+user-renamed speaker endpoints therefore need no manual configuration. The
+`AudioDeviceContains` setting remains an optional fallback for unusual drivers.
+
 ## Installation
 
 1. Close Devil May Cry 5.
@@ -44,21 +49,22 @@ matrix is not yet physically verified. Full feedback support is USB-only.
 3. Run `INSTALL-DMC5-DualSense.cmd`.
 4. In Steam, open `Devil May Cry 5 -> Properties -> Controller` and leave Steam
    Input enabled or select `Use default settings`.
-5. Paste the launch command copied by the installer into
-   `Properties -> General -> Launch Options`.
-6. Connect the controller by USB and use the normal Steam Play button.
+5. If an older release left a `DMC5DualSense.Launcher.exe` command in Steam
+   Launch Options, remove it once.
+6. Connect the controller by USB and use the normal Steam Play button. No launch
+   command is required.
 
 Running the installer over an earlier release performs a safe automatic upgrade;
 `config.json` and diagnostic logs are preserved.
 
-The bridge starts for the DMC5 session and exits with it. It creates no Windows
+REFramework loads the in-game plugin, which starts the hidden Bridge for the
+current DMC5 process. The Bridge exits with the game and creates no Windows
 startup entry, service, resident controller watcher, or virtual controller. The
-REFramework panel starts hidden and remains available with
-the `Insert` key for diagnostics.
-The launcher also hides the parent `cmd.exe` window Steam uses to expand the
-`%command%` wrapper while retaining session cleanup after DMC5 exits.
+bundled Launcher is retained only as a manual compatibility fallback. The
+REFramework panel starts hidden and remains available with the `Insert` key for
+diagnostics.
 
-## What the launcher verifies
+## Controller output paths
 
 The session uses two independent output paths:
 

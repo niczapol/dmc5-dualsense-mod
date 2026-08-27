@@ -9,9 +9,9 @@ controls menu and The Void.
 
 ## Which download should I use?
 
-Start with the **[Recommended version — lightweight](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Native-1.6.0-win-x64.zip)**
+Start with the **[Recommended version — lightweight](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.0/DMC5DualSense-Native-1.7.0-win-x64.zip)**
 (C++ build). If it does not start correctly on your PC, use the
-**[Compatibility version — fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Managed-1.6.0-win-x64.zip)**
+**[Compatibility version — fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.0/DMC5DualSense-Managed-1.7.0-win-x64.zip)**
 (C# build). Both provide the same controller features. The compatibility
 version is much larger because it includes its own .NET runtime; neither one
 requires additional software.
@@ -26,8 +26,8 @@ safe replacement while preserving user configuration and logs.
 - DMC5's ordinary combat rumble for every playable character, including V;
 - character-specific lightbar colors;
 - PlayStation prompts and correctly aligned DualSense diagrams;
-- stable touchpad, buttons, sticks, and remapping through normal Steam Input;
-- hidden, session-only launcher and bridge that exit with the game;
+- automatic hidden Bridge startup from the in-game plugin, with no Steam launch
+  command or resident background service;
 - reversible installation with backups, hashes, and exact PAK rollback.
 
 ## Requirements
@@ -65,10 +65,14 @@ Installation is identical for both versions:
 2. Extract the complete ZIP to a normal writable folder.
 3. Close DMC5 and run `INSTALL-DMC5-DualSense.cmd`.
 4. Leave Steam Input enabled/default for DMC5.
-5. Paste the command copied by the installer into
-   `Steam → Devil May Cry 5 → Properties → Launch Options`.
+5. If upgrading from an older release, remove its old
+   `DMC5DualSense.Launcher.exe` line from Steam Launch Options.
 6. Connect the controller by USB and start the game normally with Steam's Play
    button.
+
+No Steam Launch Options are required. REFramework loads the in-game plugin,
+which starts the hidden Bridge for that DMC5 process and closes it with the
+game. The bundled Launcher remains only as a compatibility fallback.
 
 See the detailed [English guide](Native/Package/README_EN.md),
 [Russian guide](Native/Package/README_RU.md), and [changelog](CHANGELOG.md).

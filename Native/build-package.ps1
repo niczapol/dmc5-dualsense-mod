@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.6.0',
+    [string]$Version,
     [string]$OutputDirectory,
     [string]$BuildDirectory,
     [string]$ToolsRoot,
@@ -14,6 +14,10 @@ $ErrorActionPreference = 'Stop'
 
 $nativeRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $nativeRoot '..'))
+if (-not $Version) {
+    $Version = [string]((Get-Content -LiteralPath (Join-Path $repoRoot 'version.json') -Raw |
+        ConvertFrom-Json).Version)
+}
 if (-not $ToolsRoot) { $ToolsRoot = Join-Path $repoRoot '.tools\native' }
 $resolvedToolsRoot = [IO.Path]::GetFullPath($ToolsRoot)
 if (-not $UiDirectory) { $UiDirectory = Join-Path $repoRoot 'Package\UI' }

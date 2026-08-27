@@ -3,6 +3,24 @@
 Only public version milestones are listed here. Internal calibration builds,
 discarded test packages, and one-off diagnostics are intentionally omitted.
 
+## 1.7.0 — Steam Play autostart and hardware detection
+
+- Removed the Steam Launch Options requirement. REFramework now loads the
+  in-game plugin normally, and the plugin starts a hidden Bridge tied directly
+  to the current DMC5 process. The bundled Launcher remains only as a backward-
+  compatible manual fallback.
+- Changed advanced-haptics endpoint selection to prefer the Windows USB
+  hardware identity and four-channel format. Localized, renamed, and future
+  Sony controller endpoints no longer depend on a particular friendly name;
+  `AudioDeviceContains` remains an optional fallback.
+- Added matching deterministic coverage to both the managed and native
+  implementations.
+- Corrected the PlayStation branch of the Settings controller diagram so
+  Triangle, Square, Cross, and Circle highlights use the physical DualSense
+  button centers at every resolution.
+- Reduced the four face-button prompt symbols inside binding cards to keep all
+  artwork cleanly inside the card frame.
+
 ## 1.6.0 — Native C++ primary release
 
 - Reimplemented Launcher, Bridge, and the REFramework gameplay plugin in native

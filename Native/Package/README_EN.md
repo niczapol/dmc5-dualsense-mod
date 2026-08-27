@@ -25,13 +25,24 @@ type and need no revision-specific configuration. DualSense Edge is accepted by
 the output and audio-endpoint detection paths, but its full hardware matrix is
 not yet physically verified. Complete feedback support requires USB.
 
+The haptics endpoint is selected primarily from its Sony USB hardware identity
+and four-channel format, not from the visible Windows device name. Localized or
+user-renamed speaker endpoints therefore need no manual configuration. The
+`AudioDeviceContains` setting remains an optional fallback for unusual drivers.
+
 ## Installation
 
 1. Extract the complete archive to a separate folder.
 2. Close DMC5 and run `INSTALL-DMC5-DualSense.cmd`.
-3. Paste the command shown by the installer into Steam → Devil May Cry 5 →
-   Properties → Launch Options.
-4. Start the game normally with Steam's Play button.
+3. If an older version left a `DMC5DualSense.Launcher.exe` command in Steam
+   Launch Options, remove it once.
+4. Start the game normally with Steam's Play button. No launch command is
+   required.
+
+REFramework loads the in-game plugin, which starts the hidden Bridge for the
+current DMC5 process. The Bridge exits with the game and creates no resident
+watcher or service. The bundled Launcher is retained only as a manual
+compatibility fallback.
 
 To remove the mod, run
 `Devil May Cry 5\DMC5DualSense\UNINSTALL-DMC5-DualSense.cmd`. The installer

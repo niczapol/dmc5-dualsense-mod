@@ -73,7 +73,7 @@ try {
     $pakPath = Join-Path $gameRoot 're_chunk_000.pak'
     New-MockPak $pakPath
 
-    & $installers[0].FullName -GameDir $gameRoot -AllowExistingFramework -NoClipboard
+    & $installers[0].FullName -GameDir $gameRoot -AllowExistingFramework
 
     $manifestPath = Join-Path $gameRoot 'DMC5DualSense\install-manifest.json'
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {

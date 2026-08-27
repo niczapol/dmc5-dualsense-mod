@@ -116,6 +116,41 @@ bool matches_dualsense_audio_endpoint(
            name.find(L"wireless controller") != std::wstring::npos;
 }
 
+AudioEndpointMatch classify_dualsense_audio_endpoint(
+    std::wstring_view friendly_name,
+    std::wstring_view configured_fragment,
+    std::wstring_view controller_device_id,
+    std::wstring_view interface_key,
+    int channel_count) {
+    auto lower = [](std::wstring_view value) {
+        std::wstring result(value);
+        std::transform(result.begin(), result.end(), result.begin(), [](wchar_t character) {
+            return static_cast<wchar_t>(std::towlower(character));
+        });
+        return result;
+    };
+
+    const auto hardware = lower(std::wstring(controller_device_id) + L" " +
+                                std::wstring(interface_key));
+    const bool sony_usb = hardware.find(L"vid_054c") != std::wstring::npos;
+    const bool known_product = hardware.find(L"pid_0ce6") != std::wstring::npos ||
+                               hardware.find(L"pid_0df2") != std::wstring::npos ||
+                               hardware.find(L"pid_0e5f") != std::wstring::npos;
+    const bool haptics_channels = channel_count >= 4;
+
+    if (known_product && haptics_channels)
+        return {1200, "hardware-id DualSense, 4-channel"};
+    if (known_product) return {1100, "hardware-id DualSense"};
+    if (sony_usb && haptics_channels)
+        return {900, "Sony USB hardware-id, 4-channel"};
+    if (matches_dualsense_audio_endpoint(friendly_name, configured_fragment)) {
+        return haptics_channels
+            ? AudioEndpointMatch{700, "friendly-name fallback, 4-channel"}
+            : AudioEndpointMatch{500, "friendly-name fallback"};
+    }
+    return {0, "not a DualSense haptics endpoint"};
+}
+
 TriggerEffect TriggerEffect::off() { return {}; }
 TriggerEffect TriggerEffect::feedback(std::uint8_t position, std::uint8_t strength) {
     return {TriggerMode::feedback, position, strength};

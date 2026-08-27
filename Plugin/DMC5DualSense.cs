@@ -898,22 +898,35 @@ public static class DMC5DualSensePlugin
 
     private static void StartBridge()
     {
-        var path = Path.Combine(_baseDirectory, "DMC5DualSense.Bridge.exe");
-        if (!File.Exists(path))
+        try
         {
-            LogError("Bridge executable not found: " + path);
-            return;
-        }
+            var path = Path.Combine(_baseDirectory, "DMC5DualSense.Bridge.exe");
+            if (!File.Exists(path))
+            {
+                LogError("Bridge executable not found: " + path);
+                return;
+            }
 
-        Process.Start(new ProcessStartInfo
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                Arguments = "--parent " +
+                            Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+                WorkingDirectory = _baseDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            WriteRuntimeLog(process is null
+                ? "Bridge process could not be created; gameplay hooks will continue."
+                : "Bridge startup requested by the in-game plugin; PID " +
+                  process.Id.ToString(CultureInfo.InvariantCulture) + ".");
+        }
+        catch (Exception ex)
         {
-            FileName = path,
-            Arguments = "--parent " + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
-            WorkingDirectory = _baseDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden
-        });
+            // Output startup must not prevent the gameplay/UI hooks from loading.
+            LogError("Bridge startup failed: " + ex.Message);
+        }
     }
 
     private static bool ReadCalibrationSetting()

@@ -608,8 +608,13 @@ void start_bridge() {
     PROCESS_INFORMATION process{};
     if (CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE,
                        CREATE_NO_WINDOW, nullptr, g_base_directory.c_str(), &startup, &process)) {
+        runtime_log("Bridge startup requested by the in-game plugin; PID " +
+                    std::to_string(process.dwProcessId) + ".");
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
+    } else {
+        log_error("Bridge startup failed with Windows error " +
+                  std::to_string(GetLastError()) + ". Gameplay hooks will continue.");
     }
 }
 

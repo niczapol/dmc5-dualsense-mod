@@ -28,6 +28,10 @@ namespace {
 
 constexpr int kSampleRate = 48'000;
 constexpr int kChannels = 4;
+const PROPERTYKEY kControllerDeviceId{
+    {0xb3f8fa53, 0x0004, 0x438e, {0x90, 0x03, 0x51, 0xa4, 0x6e, 0x13, 0x9b, 0xfc}}, 2};
+const PROPERTYKEY kDeviceInterfaceKey{
+    {0x233164c8, 0x1b2c, 0x4c7d, {0xbc, 0x68, 0xb6, 0x71, 0x68, 0x7a, 0x25, 0x67}}, 1};
 using Clock = std::chrono::steady_clock;
 
 template <typename T>
@@ -262,6 +266,33 @@ struct HapticEngine::Impl {
         return samples.size() == specs.size();
     }
 
+    static std::wstring string_property(IPropertyStore* properties,
+                                        REFPROPERTYKEY key) {
+        if (properties == nullptr) return {};
+        PROPVARIANT value;
+        PropVariantInit(&value);
+        std::wstring result;
+        if (SUCCEEDED(properties->GetValue(key, &value)) &&
+            value.vt == VT_LPWSTR && value.pwszVal != nullptr)
+            result = value.pwszVal;
+        PropVariantClear(&value);
+        return result;
+    }
+
+    static int channel_count(IMMDevice* candidate) {
+        IAudioClient* client{};
+        WAVEFORMATEX* format{};
+        int channels{};
+        if (candidate != nullptr &&
+            SUCCEEDED(candidate->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                                          reinterpret_cast<void**>(&client))) &&
+            SUCCEEDED(client->GetMixFormat(&format)) && format != nullptr)
+            channels = format->nChannels;
+        if (format != nullptr) CoTaskMemFree(format);
+        release(client);
+        return channels;
+    }
+
     bool find_device(const std::wstring& fragment) {
         IMMDeviceEnumerator* enumerator{};
         IMMDeviceCollection* collection{};
@@ -275,21 +306,29 @@ struct HapticEngine::Impl {
         }
         UINT count{};
         collection->GetCount(&count);
-        for (UINT index = 0; index < count && device == nullptr; ++index) {
+        int best_score{};
+        for (UINT index = 0; index < count; ++index) {
             IMMDevice* candidate{};
             IPropertyStore* properties{};
-            PROPVARIANT name;
-            PropVariantInit(&name);
             if (SUCCEEDED(collection->Item(index, &candidate)) &&
-                SUCCEEDED(candidate->OpenPropertyStore(STGM_READ, &properties)) &&
-                SUCCEEDED(properties->GetValue(PKEY_Device_FriendlyName, &name)) &&
-                name.vt == VT_LPWSTR && name.pwszVal != nullptr &&
-                matches_dualsense_audio_endpoint(name.pwszVal, fragment)) {
-                device = candidate;
-                device->AddRef();
-                status = utf8(name.pwszVal);
+                SUCCEEDED(candidate->OpenPropertyStore(STGM_READ, &properties))) {
+                const auto name = string_property(properties, PKEY_Device_FriendlyName);
+                const auto controller_id = string_property(
+                    properties, kControllerDeviceId);
+                const auto interface_key = string_property(
+                    properties, kDeviceInterfaceKey);
+                const auto match = classify_dualsense_audio_endpoint(
+                    name, fragment, controller_id, interface_key,
+                    channel_count(candidate));
+                if (match.score > best_score) {
+                    release(device);
+                    device = candidate;
+                    device->AddRef();
+                    best_score = match.score;
+                    status = utf8(name.empty() ? L"renamed DualSense audio endpoint" : name) +
+                             "; " + std::string(match.reason);
+                }
             }
-            PropVariantClear(&name);
             release(properties);
             release(candidate);
         }

@@ -14,6 +14,18 @@ bool matches_dualsense_audio_endpoint(
     std::wstring_view friendly_name,
     std::wstring_view configured_fragment);
 
+struct AudioEndpointMatch {
+    int score{};
+    std::string_view reason;
+};
+
+AudioEndpointMatch classify_dualsense_audio_endpoint(
+    std::wstring_view friendly_name,
+    std::wstring_view configured_fragment,
+    std::wstring_view controller_device_id,
+    std::wstring_view interface_key,
+    int channel_count);
+
 enum class TriggerMode : std::uint8_t {
     off = 0x05,
     feedback = 0x21,

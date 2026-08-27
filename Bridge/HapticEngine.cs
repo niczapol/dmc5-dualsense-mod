@@ -74,10 +74,30 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            _audioDevice = enumerator
+            var candidates = enumerator
                 .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-                .FirstOrDefault(device =>
-                    MatchesAudioEndpointName(device.FriendlyName, deviceNameFragment));
+                .Select(device => new
+                {
+                    Device = device,
+                    Match = ClassifyAudioEndpoint(
+                        device.FriendlyName,
+                        deviceNameFragment,
+                        ReadStringProperty(device, PropertyKeys.PKEY_Device_ControllerDeviceId),
+                        ReadStringProperty(device, PropertyKeys.PKEY_Device_InterfaceKey),
+                        ReadChannelCount(device))
+                })
+                .ToArray();
+            var selected = candidates
+                .Where(candidate => candidate.Match.Score > 0)
+                .OrderByDescending(candidate => candidate.Match.Score)
+                .FirstOrDefault();
+            _audioDevice = selected?.Device;
+
+            foreach (var candidate in candidates)
+            {
+                if (!ReferenceEquals(candidate.Device, _audioDevice))
+                    candidate.Device.Dispose();
+            }
 
             if (_audioDevice is null)
             {
@@ -91,7 +111,8 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             _output = new WasapiOut(_audioDevice, AudioClientShareMode.Shared, true, 20);
             _output.Init(this);
             _output.Play();
-            _status = $"{_audioDevice.FriendlyName}; {volumeStatus}; " +
+            _status = $"{_audioDevice.FriendlyName}; {selected!.Match.Reason}; " +
+                      $"{volumeStatus}; " +
                       $"{_samples.Count}/12 original PS5 samples";
             return true;
         }
@@ -121,6 +142,62 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         // exact match.
         return friendlyName.Contains("DualSense", StringComparison.OrdinalIgnoreCase) &&
                friendlyName.Contains("Wireless Controller", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static AudioEndpointMatch ClassifyAudioEndpoint(
+        string friendlyName,
+        string configuredFragment,
+        string controllerDeviceId,
+        string interfaceKey,
+        int channelCount)
+    {
+        var hardwareIdentity = controllerDeviceId + " " + interfaceKey;
+        var hasSonyUsbVendor = hardwareIdentity.Contains(
+            "VID_054C", StringComparison.OrdinalIgnoreCase);
+        var hasKnownDualSenseProduct =
+            hardwareIdentity.Contains("PID_0CE6", StringComparison.OrdinalIgnoreCase) ||
+            hardwareIdentity.Contains("PID_0DF2", StringComparison.OrdinalIgnoreCase) ||
+            hardwareIdentity.Contains("PID_0E5F", StringComparison.OrdinalIgnoreCase);
+        var hasHapticsChannels = channelCount >= ChannelCount;
+
+        if (hasKnownDualSenseProduct && hasHapticsChannels)
+            return new AudioEndpointMatch(1200, "hardware-id DualSense, 4-channel");
+        if (hasKnownDualSenseProduct)
+            return new AudioEndpointMatch(1100, "hardware-id DualSense");
+        if (hasSonyUsbVendor && hasHapticsChannels)
+            return new AudioEndpointMatch(900, "Sony USB hardware-id, 4-channel");
+
+        if (MatchesAudioEndpointName(friendlyName, configuredFragment))
+            return new AudioEndpointMatch(
+                hasHapticsChannels ? 700 : 500,
+                hasHapticsChannels ? "friendly-name fallback, 4-channel" :
+                                     "friendly-name fallback");
+
+        return new AudioEndpointMatch(0, "not a DualSense haptics endpoint");
+    }
+
+    private static string ReadStringProperty(MMDevice device, PropertyKey key)
+    {
+        try
+        {
+            return device.Properties.TryGetValue<string>(key, out var value)
+                ? value ?? ""
+                : "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static int ReadChannelCount(MMDevice device)
+    {
+        try
+        {
+            using var client = device.AudioClient;
+            return client.MixFormat.Channels;
+        }
+        catch { return 0; }
     }
 
     private string ConfigureEndpointVolume(bool ensureAudible, float endpointVolume)
@@ -704,3 +781,5 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         public readonly float HighFrequency = highFrequency;
     }
 }
+
+internal readonly record struct AudioEndpointMatch(int Score, string Reason);

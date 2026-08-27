@@ -52,6 +52,19 @@ int main() {
               L"Speakers (Realtek(R) Audio)",
               L"DualSense Wireless Controller"),
           "Unrelated audio endpoint is rejected");
+    check(classify_dualsense_audio_endpoint(
+              L"My custom controller audio", L"DualSense Wireless Controller",
+              L"{1}.USB\\VID_054C&PID_0CE6&MI_00\\6&ABC&0&0000",
+              L"{2}.\\\\?\\usb#vid_054c&pid_0ce6&mi_00#...", 4).score == 1200,
+          "Renamed DualSense endpoint is accepted by USB hardware identity");
+    check(classify_dualsense_audio_endpoint(
+              L"Renamed gamepad", L"DualSense Wireless Controller",
+              L"USB\\VID_054C&PID_FFFF&MI_00\\...", L"", 4).score == 900,
+          "Future Sony four-channel controller needs no known product id");
+    check(classify_dualsense_audio_endpoint(
+              L"Surround speakers", L"DualSense Wireless Controller",
+              L"USB\\VID_1234&PID_5678\\...", L"", 8).score == 0,
+          "Unrelated four-channel endpoint is rejected without Sony hardware identity");
 
     {
         AdaptiveTriggerRuntime runtime;

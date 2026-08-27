@@ -1,11 +1,10 @@
 ﻿param(
     [string]$GameDir,
-    [switch]$AllowExistingFramework,
-    [switch]$NoClipboard
+    [switch]$AllowExistingFramework
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.6.0-native'
+$packageVersion = '1.7.0-native'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {
@@ -461,19 +460,8 @@ try {
     Write-Host 'Для работы мода не нужны .NET, ViGEm, виртуальный геймпад или отдельный драйвер.'
     Write-Host 'Для DMC5 оставьте Steam Input включённым или выберите «Использовать настройки по умолчанию».' -ForegroundColor Yellow
     Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
-    $steamLaunchCommand = '"' + (Join-Path $modDir 'DMC5DualSense.Launcher.exe') + '" %command%'
-    $copiedToClipboard = $false
-    if (-not $NoClipboard) {
-        try {
-            Set-Clipboard -Value $steamLaunchCommand
-            $copiedToClipboard = $true
-        } catch { }
-    }
-    Write-Host 'Один раз укажите в Steam -> Свойства -> Параметры запуска:'
-    Write-Host $steamLaunchCommand -ForegroundColor Cyan
-    if ($copiedToClipboard) {
-        Write-Host 'Строка уже скопирована в буфер обмена — просто вставьте её через Ctrl+V.' -ForegroundColor Green
-    }
+    Write-Host 'Параметры запуска Steam для мода не нужны.' -ForegroundColor Green
+    Write-Host 'Если вы обновились со старой версии, удалите прежнюю строку DMC5DualSense.Launcher из параметров запуска.' -ForegroundColor Yellow
 }
 catch {
     Restore-PakInvalidations $resolvedGameDir @($pakInvalidations)

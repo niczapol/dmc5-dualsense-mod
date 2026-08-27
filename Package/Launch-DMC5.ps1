@@ -12,6 +12,6 @@ if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
     exit 0
 }
 
-# Steam applies the configured launch option. Its launcher owns the session
-# Bridge and tears it down with DMC5; this helper never creates a resident task.
+# REFramework loads the in-game plugin, which starts the hidden session Bridge
+# and ties it to DMC5. This helper never creates a resident task.
 Start-Process 'steam://rungameid/601150'

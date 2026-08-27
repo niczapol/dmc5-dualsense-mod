@@ -23,6 +23,39 @@ Run("unrelated audio endpoint is rejected", () =>
         "DualSense Wireless Controller"));
 });
 
+Run("renamed DualSense endpoint is accepted by USB hardware identity", () =>
+{
+    var match = HapticEngine.ClassifyAudioEndpoint(
+        "My custom controller audio",
+        "DualSense Wireless Controller",
+        @"{1}.USB\VID_054C&PID_0CE6&MI_00\6&ABC&0&0000",
+        @"{2}.\\?\usb#vid_054c&pid_0ce6&mi_00#...",
+        4);
+    Equal(1200, match.Score);
+});
+
+Run("future Sony four-channel controller does not require a known product id", () =>
+{
+    var match = HapticEngine.ClassifyAudioEndpoint(
+        "Renamed gamepad",
+        "DualSense Wireless Controller",
+        @"USB\VID_054C&PID_FFFF&MI_00\...",
+        "",
+        4);
+    Equal(900, match.Score);
+});
+
+Run("unrelated four-channel endpoint is rejected without Sony hardware identity", () =>
+{
+    var match = HapticEngine.ClassifyAudioEndpoint(
+        "Surround speakers",
+        "DualSense Wireless Controller",
+        @"USB\VID_1234&PID_5678\...",
+        "",
+        8);
+    Equal(0, match.Score);
+});
+
 Run("Dante face-button gun mapping keeps both triggers free", () =>
 {
     var runtime = new AdaptiveTriggerRuntime();

@@ -26,8 +26,11 @@ colors, PlayStation button prompts, and an aligned DualSense controller diagram.
 - PlayStation Accessories, DS4Windows, DualSenseX, and similar controller tools
   closed while playing.
 
-Bluetooth cannot carry the four-channel audio stream used for advanced haptics,
-so the complete feature set requires USB.
+USB is the only fully supported and physically verified connection. Bluetooth
+is experimental: normal Steam Input controls should remain available, but
+adaptive triggers, lightbar output, and ordinary rumble are not guaranteed.
+Advanced haptics cannot work over the current Bluetooth path because Windows
+does not expose the required four-channel DualSense audio endpoint.
 
 Standard DualSense CFI-ZCT1 and CFI-ZCT2 models use Steam's common PS5-controller
 type and do not require model-specific configuration. DualSense Edge is accepted

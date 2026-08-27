@@ -9,12 +9,12 @@ controls menu and The Void.
 
 ## Which download should I use?
 
-| Build | Recommendation | Extra installation |
-| --- | --- | --- |
-| **Native C++** | **Use this first.** Small, fast, and the primary supported build. | None |
-| Managed C# fallback | Try this only if the native build does not start correctly on your PC. It implements the same controller behavior but has a much larger self-contained runtime. | None |
+Start with **[Native C++ 1.6.0](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Native-1.6.0-win-x64.zip)**.
+It is the recommended, smaller build. If it does not start correctly on your
+PC, use the **[Managed C# 1.6.0 fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Managed-1.6.0-win-x64.zip)**.
+The fallback implements the same controller behavior but is much larger because
+it includes its own .NET runtime; neither build requires additional software.
 
-Download both builds from [GitHub Releases](https://github.com/niczapol/dmc5-dualsense-mod/releases).
 Do not install both at once. Running either installer over the other performs a
 safe replacement while preserving user configuration and logs.
 
@@ -36,7 +36,15 @@ safe replacement while preserving user configuration and logs.
 - a DualSense connected over USB;
 - Steam Input enabled or left at the game's default setting.
 
-USB is required for the four-channel audio endpoint used by advanced haptics.
+USB is the only fully supported and physically verified connection. Bluetooth
+is experimental: Steam Input should continue to provide buttons, sticks,
+touchpad input, and remapping, but this mod's trigger, lightbar, and ordinary
+rumble output has not been validated over Bluetooth and is not guaranteed.
+Advanced haptics cannot work over the current Bluetooth path because Windows
+does not expose the required four-channel DualSense audio endpoint. Sony also
+documents PC haptic feedback as requiring USB in its
+[DualSense compatibility notes](https://www.playstation.com/en-us/support/hardware/pair-dualsense-controller-bluetooth/).
+
 Close PlayStation Accessories, DS4Windows, DualSenseX, and similar controller
 utilities while playing.
 
@@ -63,43 +71,6 @@ installation is needed because the fallback archive includes its runtime.
 
 See the detailed [English guide](Native/Package/README_EN.md),
 [Russian guide](Native/Package/README_RU.md), and [changelog](CHANGELOG.md).
-
-## Runtime design
-
-Steam Input is the only owner of gameplay input: buttons, sticks, remapping,
-and the physical touchpad. The mod does not capture controller input or create a
-virtual gamepad. Its session bridge sends adaptive-trigger effects, LED color,
-and ordinary rumble through Steam's DualSense output API, while four-channel
-WASAPI carries advanced haptics. There is no service, startup entry, resident
-watcher, or background process after DMC5 exits.
-
-## Reproducible builds
-
-The primary C++ build uses pinned LLVM-MinGW and REFramework headers:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Native\Prepare-Dependencies.ps1
-powershell -ExecutionPolicy Bypass -File .\Native\build-package.ps1 -Version 1.6.0
-```
-
-The C# fallback remains buildable with the .NET 10 SDK:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Tools\Build-Release.ps1 `
-  -Version 1.6.0
-```
-
-Final packaging needs the separately supplied UI and haptic media listed in
-`release-assets.json`; every input is verified by exact size and SHA-256. The
-finished player archives are self-contained and require no .NET installation,
-ViGEm, virtual-controller driver, or build tools.
-
-## Community guides
-
-Drafts for the planned Steam Community guides are kept in
-[English](docs/steam/STEAM_GUIDE_EN.md) and
-[Russian](docs/steam/STEAM_GUIDE_RU.md). Screenshots will be added from the
-final native release in-game.
 
 ## Disclaimer
 

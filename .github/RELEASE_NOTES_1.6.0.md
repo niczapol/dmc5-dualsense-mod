@@ -14,6 +14,14 @@ and keeps the self-contained C# implementation as a compatibility fallback.
 Neither archive requires a separate .NET installation, ViGEm, a virtual
 controller, or an additional driver.
 
+### Connection support
+
+USB is the supported and physically verified connection for the complete
+feature set. Bluetooth is experimental: normal Steam Input controls should
+remain available, but trigger, lightbar, and ordinary-rumble output is not
+guaranteed. Advanced haptics cannot work over the current Bluetooth path because
+Windows does not expose the required four-channel DualSense audio endpoint.
+
 ### Native runtime
 
 - Ports Launcher, Bridge, and the REFramework plugin to native C++.

@@ -32,7 +32,7 @@
     {
       "Path": "natives/x64/ui/gui/ui0000/tex/ui0010_iam.tex.11.x64",
       "Size": 2097200,
-      "Sha256": "1C481E1E05DD17D141AB0E3063678ED9907C75CDEA044126C800EBB5B9D854E7"
+      "Sha256": "82A01D0B95E0BCE9A209BE1AFB7E21AD0C61E7BAA68C663BD2A953999EB30E9C"
     },
     {
       "Path": "natives/x64/ui/gui/ui3100/gui/ui3109.gui.270020",
@@ -42,7 +42,7 @@
     {
       "Path": "natives/x64/ui/gui/ui4000/gui/ui4002.gui.270020",
       "Size": 392916,
-      "Sha256": "59407E8C15F5B5B5C57109FD52B6450856A4FBCE8CF9199C0100FFB13A995699"
+      "Sha256": "A61D61D05329EACC1D4B500E98D67D8B81E6D099E4308CC383883454FE0FF189"
     },
     {
       "Path": "natives/x64/ui/gui/ui4000/tex/ui4002_00_iam.tex.11",

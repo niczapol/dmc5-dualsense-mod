@@ -354,13 +354,15 @@ internal static class Program
             // DMC5 has two independent controller timelines in this screen.
             // Nero's grouped D-pad and the Settings shoulder indicators can be
             // rendered by s_c_PS4, while other layouts use s_c_XB1. Patch those
-            // controls in both timelines; retain the PS4-specific face/stick
-            // positions which are already aligned with the replacement art.
-            // Stick-press markers are also patched in both timelines because
-            // the original PS4 anchors sit above the DualSense stick caps.
+            // controls in both timelines.
+            // Face-button and stick-press markers are also patched in both
+            // timelines. The original PS4 face anchors belong to the narrower
+            // DualShock artwork and sit progressively left of Square, Cross
+            // and especially Circle on the replacement DualSense image.
             if (container.Info.Name.Equals("s_c_PS4", StringComparison.OrdinalIgnoreCase) &&
                 !clip.name.StartsWith("Dir", StringComparison.OrdinalIgnoreCase) &&
-                clip.name is not ("LT" or "LB" or "RT" or "RB" or "LStP" or "RStP"))
+                clip.name is not ("BtnU" or "BtnD" or "BtnL" or "BtnR" or
+                                  "LT" or "LB" or "RT" or "RB" or "LStP" or "RStP"))
                 continue;
             foreach (var track in clip.clip.Tracks.Where(track =>
                          track.Name.StartsWith("t_btn_active", StringComparison.OrdinalIgnoreCase)))

@@ -325,8 +325,13 @@ internal static class Program
     {
         return DrawPromptCell((graphics, scale) =>
         {
+            // Settings renders an 80x80 prompt cell inside a shorter black
+            // binding card. A 62px ring touched the card border after UI
+            // scaling, most visibly for Square/Cross. Keep the cell and its
+            // alignment unchanged, but inset the complete PlayStation prompt
+            // around the same 40,40 centre.
             DrawRoundPromptBase(graphics, scale,
-                new Rectangle(9 * scale, 9 * scale, 62 * scale, 62 * scale));
+                new Rectangle(12 * scale, 12 * scale, 56 * scale, 56 * scale));
             var colour = glyph switch
             {
                 FaceGlyph.Cross => Color.FromArgb(255, 126, 161, 222),
@@ -335,7 +340,7 @@ internal static class Program
                 FaceGlyph.Triangle => Color.FromArgb(255, 165, 203, 169),
                 _ => Color.White
             };
-            using var pen = new Pen(colour, 3.0f * scale)
+            using var pen = new Pen(colour, 2.75f * scale)
             {
                 StartCap = LineCap.Round,
                 EndCap = LineCap.Round,
@@ -344,23 +349,23 @@ internal static class Program
             switch (glyph)
             {
                 case FaceGlyph.Cross:
-                    graphics.DrawLine(pen, 27 * scale, 27 * scale, 53 * scale, 53 * scale);
-                    graphics.DrawLine(pen, 53 * scale, 27 * scale, 27 * scale, 53 * scale);
+                    graphics.DrawLine(pen, 29 * scale, 29 * scale, 51 * scale, 51 * scale);
+                    graphics.DrawLine(pen, 51 * scale, 29 * scale, 29 * scale, 51 * scale);
                     break;
                 case FaceGlyph.Circle:
-                    graphics.DrawEllipse(pen, 25 * scale, 25 * scale, 30 * scale, 30 * scale);
+                    graphics.DrawEllipse(pen, 27 * scale, 27 * scale, 26 * scale, 26 * scale);
                     break;
                 case FaceGlyph.Square:
-                    graphics.DrawRectangle(pen, 27 * scale, 27 * scale, 26 * scale, 26 * scale);
+                    graphics.DrawRectangle(pen, 29 * scale, 29 * scale, 22 * scale, 22 * scale);
                     break;
                 case FaceGlyph.Triangle:
                     using (var path = new GraphicsPath())
                     {
                         path.AddPolygon(
                         [
-                            new PointF(40 * scale, 24 * scale),
-                            new PointF(56 * scale, 54 * scale),
-                            new PointF(24 * scale, 54 * scale)
+                            new PointF(40 * scale, 27 * scale),
+                            new PointF(54 * scale, 52 * scale),
+                            new PointF(26 * scale, 52 * scale)
                         ]);
                         graphics.DrawPath(pen, path);
                     }

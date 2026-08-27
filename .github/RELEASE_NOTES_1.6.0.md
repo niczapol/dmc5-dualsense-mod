@@ -5,11 +5,12 @@ and keeps the self-contained C# implementation as a compatibility fallback.
 
 ### Downloads
 
-- **`DMC5DualSense-Native-1.6.0-win-x64.zip` — recommended.** Small native C++
-  package with no .NET runtime requirement.
-- **`DMC5DualSense-Managed-1.6.0-win-x64.zip` — fallback.** Use only if the
-  native build does not start correctly on a particular PC. It implements the
-  same controller behavior and includes its own .NET runtime.
+- **Recommended version — lightweight:**
+  `DMC5DualSense-Native-1.6.0-win-x64.zip` (C++ build). Use this first.
+- **Compatibility version — fallback:**
+  `DMC5DualSense-Managed-1.6.0-win-x64.zip` (C# build). Use this only if the
+  Recommended version does not start correctly on a particular PC. It provides
+  the same controller features and includes its own .NET runtime.
 
 Neither archive requires a separate .NET installation, ViGEm, a virtual
 controller, or an additional driver.

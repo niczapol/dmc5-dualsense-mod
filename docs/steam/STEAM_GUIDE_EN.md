@@ -1,6 +1,6 @@
-# Steam Community Guide draft — English
+# Steam Community Guide — English
 
-Suggested title: **Full DualSense Support on PC — Adaptive Triggers, Haptics and PlayStation UI**
+Suggested title: **DMC5 DualSense Support — Adaptive Triggers, Haptics & PlayStation UI**
 
 Suggested category: `Modding or Configuration`
 
@@ -22,13 +22,21 @@ DMC5 exits.
 
 ## Download
 
-GitHub project and releases:
+Project page, downloads, source code, and updates:
 
 https://github.com/niczapol/dmc5-dualsense-mod
 
-Use **Native C++** first. It is the recommended, compact build and does not
-require .NET. The **Managed C# fallback** implements the same behavior and is
-provided only for PCs where the native build does not start correctly.
+For most users: **Recommended version — lightweight** (C++ build):
+
+https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Native-1.6.0-win-x64.zip
+
+If it does not start on your PC: **Compatibility version — fallback** (C# build):
+
+https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Managed-1.6.0-win-x64.zip
+
+Both versions provide the same controller features and use the same installation
+steps. The compatibility version is larger because it includes its own runtime;
+you do not need to install .NET separately.
 
 ## Requirements
 
@@ -37,7 +45,12 @@ provided only for PCs where the native build does not start correctly.
 - a DualSense connected over USB;
 - Steam Input enabled or set to the game's default.
 
-USB is required for the four-channel audio endpoint used by advanced haptics.
+USB is the only fully tested connection for the complete feature set. Bluetooth
+is experimental: normal Steam Input controls should remain available, but
+trigger, lightbar, and ordinary-rumble output is not guaranteed. Advanced
+haptics cannot work through the current Bluetooth path because Windows does not
+expose the required four-channel DualSense audio endpoint.
+
 Close DS4Windows, DualSenseX, PlayStation Accessories, and similar controller
 tools before starting the game.
 
@@ -47,7 +60,10 @@ audio paths, although its complete hardware matrix is not yet physically tested.
 
 ## Installation
 
-1. Download `DMC5DualSense-Native-1.6.0-win-x64.zip` from the latest release.
+Installation is identical for both versions:
+
+1. Download the Recommended version, or use the Compatibility version if the
+   Recommended version does not start on your PC.
 2. Extract the complete ZIP to a normal writable folder.
 3. Close DMC5 and run `INSTALL-DMC5-DualSense.cmd`.
 4. In Steam, open `Devil May Cry 5 → Properties → Controller` and leave Steam
@@ -56,8 +72,8 @@ audio paths, although its complete hardware matrix is not yet physically tested.
    `Properties → General → Launch Options`.
 6. Connect DualSense over USB and start DMC5 normally with Steam's Play button.
 
-To switch to the fallback build, run its installer over the current version.
-The installer safely replaces the runtime and preserves configuration and logs.
+To switch between versions, run the other installer over the current one. The
+installer safely replaces the runtime and preserves configuration and logs.
 
 ## What to expect
 
@@ -87,16 +103,20 @@ entries. Saves and the game executable are not modified.
   exposes `Speakers (DualSense Wireless Controller)`.
 - Duplicate or missing input: close other controller utilities and leave Steam
   Input enabled/default.
-- Native build does not start: install the Managed C# fallback from the same
-  GitHub release; no separate .NET download is needed.
+- Recommended version does not start: install the Compatibility version from
+  the same GitHub release; no separate .NET download is needed.
 
-## Suggested screenshots
+## Feedback and bug reports
 
-1. DualSense diagram in the controls menu with a D-pad or shoulder marker active.
-2. Compact DualSense diagram in The Void with several correctly aligned markers.
-3. PlayStation face-button prompts during gameplay or training.
-4. Optional photo showing the character-specific lightbar color.
-5. Steam Launch Options field containing the generated launcher command.
+If something does not work, leave a comment under this guide, send me a Steam
+message, or open an issue on GitHub:
+
+https://github.com/niczapol/dmc5-dualsense-mod/issues
+
+Please include the mod version, your controller model, USB/Bluetooth connection,
+the affected character or action, and the files from
+`Devil May Cry 5\DMC5DualSense\Logs`. These details make problems much easier to
+reproduce and fix.
 
 This is an unofficial community mod and is not affiliated with Capcom, Sony,
 or Valve. A legitimate Steam copy of Devil May Cry 5 is required.

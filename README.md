@@ -9,11 +9,12 @@ controls menu and The Void.
 
 ## Which download should I use?
 
-Start with **[Native C++ 1.6.0](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Native-1.6.0-win-x64.zip)**.
-It is the recommended, smaller build. If it does not start correctly on your
-PC, use the **[Managed C# 1.6.0 fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Managed-1.6.0-win-x64.zip)**.
-The fallback implements the same controller behavior but is much larger because
-it includes its own .NET runtime; neither build requires additional software.
+Start with the **[Recommended version — lightweight](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Native-1.6.0-win-x64.zip)**
+(C++ build). If it does not start correctly on your PC, use the
+**[Compatibility version — fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.6.0/DMC5DualSense-Managed-1.6.0-win-x64.zip)**
+(C# build). Both provide the same controller features. The compatibility
+version is much larger because it includes its own .NET runtime; neither one
+requires additional software.
 
 Do not install both at once. Running either installer over the other performs a
 safe replacement while preserving user configuration and logs.
@@ -56,7 +57,11 @@ physical-controller test matrix. Full feedback support remains USB-only.
 
 ## Installation
 
-1. Download the **Native C++** ZIP from the latest GitHub release.
+Installation is identical for both versions:
+
+1. Download either the **Recommended version — lightweight** or, if it does not
+   work on your PC, the **Compatibility version — fallback** using the links
+   above.
 2. Extract the complete ZIP to a normal writable folder.
 3. Close DMC5 and run `INSTALL-DMC5-DualSense.cmd`.
 4. Leave Steam Input enabled/default for DMC5.
@@ -64,10 +69,6 @@ physical-controller test matrix. Full feedback support remains USB-only.
    `Steam → Devil May Cry 5 → Properties → Launch Options`.
 6. Connect the controller by USB and start the game normally with Steam's Play
    button.
-
-If the native build does not start correctly, download the **Managed C#
-fallback** ZIP and run its installer in the same way. No separate .NET
-installation is needed because the fallback archive includes its runtime.
 
 See the detailed [English guide](Native/Package/README_EN.md),
 [Russian guide](Native/Package/README_RU.md), and [changelog](CHANGELOG.md).

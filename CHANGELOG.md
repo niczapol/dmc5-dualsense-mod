@@ -24,8 +24,7 @@ discarded test packages, and one-off diagnostics are intentionally omitted.
 - Rebuilt the PlayStation prompt cells without stray edge pixels, refined the
   Settings stick markers, and matched the active Circle marker to the native
   Triangle/Cross/Square artwork.
-- Added bilingual primary/fallback installation guidance and Steam Community
-  guide drafts.
+- Added bilingual primary/fallback installation guidance.
 
 ## 1.5.5 — Stable Steam Input architecture
 

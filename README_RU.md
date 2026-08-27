@@ -77,6 +77,15 @@ PS5-контроллера в Steam, поэтому мод не привязан
 Подробности: [русский гайд](Native/Package/README_RU.md),
 [английский гайд](Native/Package/README_EN.md) и [история изменений](CHANGELOG.md).
 
+## Руководства в Steam Community
+
+- [Русское - DMC5 DualSense Support: адаптивные курки, хаптика и интерфейс PlayStation](https://steamcommunity.com/sharedfiles/filedetails/?id=3790889124)
+- [Английское - DMC5 DualSense Support: Adaptive Triggers, Haptics and PlayStation UI](https://steamcommunity.com/sharedfiles/filedetails/?id=3790893015)
+
+Руководства в Steam содержат сокращённую публичную инструкцию по установке и
+совместимости. При изменении релиза, способа установки, поддержки контроллеров,
+ограничений или порядка сбора баг-репорта их нужно обновлять вместе с README.
+
 ## Отказ от аффилированности
 
 Это неофициальная модификация сообщества, не связанная с Capcom, Sony или

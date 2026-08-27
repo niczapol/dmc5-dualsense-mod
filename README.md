@@ -77,6 +77,15 @@ game. The bundled Launcher remains only as a compatibility fallback.
 See the detailed [English guide](Native/Package/README_EN.md),
 [Russian guide](Native/Package/README_RU.md), and [changelog](CHANGELOG.md).
 
+## Steam Community guides
+
+- [English - DMC5 DualSense Support: Adaptive Triggers, Haptics and PlayStation UI](https://steamcommunity.com/sharedfiles/filedetails/?id=3790893015)
+- [Russian - DMC5 DualSense Support: адаптивные курки, хаптика и интерфейс PlayStation](https://steamcommunity.com/sharedfiles/filedetails/?id=3790889124)
+
+The Steam guides provide a concise public installation and compatibility
+reference. Keep them synchronized with changes to releases, installation,
+hardware support, known limitations, and the bug-report procedure.
+
 ## Disclaimer
 
 This is an unofficial community mod and is not affiliated with Capcom, Sony,

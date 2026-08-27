@@ -14,6 +14,12 @@ The archive is self-contained. It does not require .NET, ViGEm, a virtual
 controller, or a separate driver. The Bridge exists only for the current game
 session and exits with DMC5.
 
+USB is the only fully supported and physically verified connection. Bluetooth
+is experimental: normal Steam Input controls should remain available, but
+adaptive triggers, lightbar output, and ordinary rumble are not guaranteed.
+Advanced haptics cannot work over the current Bluetooth path because it has no
+four-channel DualSense audio endpoint.
+
 Standard DualSense CFI-ZCT1 and CFI-ZCT2 models use Steam's common PS5-controller
 type and need no revision-specific configuration. DualSense Edge is accepted by
 the output and audio-endpoint detection paths, but its full hardware matrix is

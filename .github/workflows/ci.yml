@@ -48,6 +48,8 @@ jobs:
           foreach ($path in @(
             'Package/Install.ps1',
             'Package/Uninstall.ps1',
+            'Native/Package/Install.ps1',
+            'Native/Package/Uninstall.ps1',
             'Tools/Build-Release.ps1',
             'Tools/Test-CleanInstall.ps1'
           )) {

@@ -660,9 +660,13 @@ void initialize_udp(int port) {
 
 extern "C" __declspec(dllexport) void
 reframework_plugin_required_version(REFrameworkPluginVersion* version) {
-    version->major = REFRAMEWORK_PLUGIN_VERSION_MAJOR;
-    version->minor = REFRAMEWORK_PLUGIN_VERSION_MINOR;
-    version->patch = REFRAMEWORK_PLUGIN_VERSION_PATCH;
+    // This plugin uses only the API prefix available since Plugin API 1.10.
+    // Newer 1.15 fields are appended to the ABI and are intentionally unused,
+    // so an existing REFramework v1.5.9.1 installation can load the plugin
+    // without replacing its dinput8.dll or disturbing its other plugins.
+    version->major = 1;
+    version->minor = 10;
+    version->patch = 0;
     version->game_name = "DMC5";
 }
 

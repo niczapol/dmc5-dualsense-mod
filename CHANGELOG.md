@@ -3,6 +3,26 @@
 Only public version milestones are listed here. Internal calibration builds,
 discarded test packages, and one-off diagnostics are intentionally omitted.
 
+## 1.7.1 — Safe REFramework coexistence
+
+- Changed both installers to coexist with an existing recognized REFramework:
+  a different `dinput8.dll` is preserved and DMC5DualSense is installed as an
+  additional plugin instead of replacing the framework and risking other mods.
+- Added a normal interactive `Y/N` choice when an unknown `dinput8.dll` is
+  found. The user no longer needs a PowerShell parameter: accepted replacement
+  is backed up, recorded in the install manifest, and restored exactly on
+  uninstall; declining leaves the existing DLL unchanged.
+- Changed installer and uninstaller console messages to clear English text.
+- Added isolated coverage for clean framework installation, preservation of a
+  different REFramework build, non-interactive rejection of an unknown proxy,
+  and reversible prompted replacement.
+- Prevented uninstall from overwriting a pre-existing file that another tool
+  changed after DMC5DualSense was installed; its original backup is retained for
+  manual recovery instead of being discarded.
+- Lowered the native plugin's declared REFramework requirement to Plugin API
+  1.10 after verifying that it uses only the unchanged ABI prefix. This allows
+  the official REFramework v1.5.9.1 DMC5 build to remain installed.
+
 ## 1.7.0 — Steam Play autostart and hardware detection
 
 - Removed the Steam Launch Options requirement. REFramework now loads the

@@ -44,6 +44,15 @@ current DMC5 process. The Bridge exits with the game and creates no resident
 watcher or service. The bundled Launcher is retained only as a manual
 compatibility fallback.
 
+The package contains an unmodified official REFramework `dinput8.dll`. If a
+different recognized REFramework build is already installed, it is preserved
+and this installer adds the DMC5DualSense plugin alongside the user's existing
+plugins. If an unknown `dinput8.dll` is found, the installer asks whether to
+replace it. Choose `Y` to keep an exact backup and continue, or `N` to cancel
+without changing the existing DLL. The uninstaller restores a replaced file
+exactly. The native plugin deliberately targets the
+unchanged ABI prefix available in REFramework Plugin API 1.10 and newer.
+
 To remove the mod, run
 `Devil May Cry 5\DMC5DualSense\UNINSTALL-DMC5-DualSense.cmd`. The installer
 keeps a manifest and backups for reversible removal.

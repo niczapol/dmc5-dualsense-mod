@@ -69,11 +69,24 @@ try {
         throw "Expected one Install.ps1 in the release ZIP, found $($installers.Count)."
     }
 
+    $frameworkZips = @(Get-ChildItem -LiteralPath $extractRoot -Filter 'REFramework.zip' -File -Recurse)
+    if ($frameworkZips.Count -ne 1) {
+        throw "Expected one REFramework.zip in the release ZIP, found $($frameworkZips.Count)."
+    }
+    $frameworkRoot = Join-Path $workRoot 'framework'
+    Expand-Archive -LiteralPath $frameworkZips[0].FullName -DestinationPath $frameworkRoot
+    $bundledDinputs = @(Get-ChildItem -LiteralPath $frameworkRoot -Filter 'dinput8.dll' -File -Recurse)
+    if ($bundledDinputs.Count -ne 1) {
+        throw "Expected one bundled dinput8.dll, found $($bundledDinputs.Count)."
+    }
+    $bundledDinput = $bundledDinputs[0].FullName
+    $bundledDinputHash = Get-Hash $bundledDinput
+
     New-Item -ItemType File -Path (Join-Path $gameRoot 'DevilMayCry5.exe') | Out-Null
     $pakPath = Join-Path $gameRoot 're_chunk_000.pak'
     New-MockPak $pakPath
 
-    & $installers[0].FullName -GameDir $gameRoot -AllowExistingFramework
+    & $installers[0].FullName -GameDir $gameRoot
 
     $manifestPath = Join-Path $gameRoot 'DMC5DualSense\install-manifest.json'
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -114,11 +127,142 @@ try {
         throw 'install-manifest.json remained after uninstall.'
     }
 
+    $targetDinput = Join-Path $gameRoot 'dinput8.dll'
+    if (Test-Path -LiteralPath $targetDinput) {
+        throw 'Clean uninstall left the bundled dinput8.dll behind.'
+    }
+
+    # A byte-distinct REFramework build must be kept in place. Mutating the
+    # final byte gives this installer-only fixture a different hash while
+    # retaining a valid x64 PE header and the embedded REFramework identity.
+    Copy-Item -LiteralPath $bundledDinput -Destination $targetDinput
+    $fixtureStream = [IO.File]::Open($targetDinput, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite)
+    try {
+        $fixtureStream.Position = $fixtureStream.Length - 1
+        $lastByte = $fixtureStream.ReadByte()
+        $fixtureStream.Position = $fixtureStream.Length - 1
+        $fixtureStream.WriteByte([byte](($lastByte + 1) -band 0xFF))
+    }
+    finally {
+        $fixtureStream.Dispose()
+    }
+    $existingFrameworkHash = Get-Hash $targetDinput
+    if ($existingFrameworkHash -eq $bundledDinputHash) {
+        throw 'The alternate REFramework fixture did not get a distinct hash.'
+    }
+
+    & $installers[0].FullName -GameDir $gameRoot
+    $preserveManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if ([string]$preserveManifest.Framework.Action -ne 'PreserveExisting') {
+        throw "Expected PreserveExisting, got $($preserveManifest.Framework.Action)."
+    }
+    if ((Get-Hash $targetDinput) -ne $existingFrameworkHash) {
+        throw 'The installer changed an existing REFramework dinput8.dll.'
+    }
+    & (Join-Path $gameRoot 'DMC5DualSense\Uninstall.ps1') -GameDir $gameRoot
+    if ((Get-Hash $targetDinput) -ne $existingFrameworkHash) {
+        throw 'The uninstaller changed a preserved REFramework dinput8.dll.'
+    }
+
+    # An unknown proxy must not be overwritten implicitly.
+    [IO.File]::WriteAllBytes($targetDinput, [Text.Encoding]::ASCII.GetBytes('MZ unknown dinput8 proxy fixture'))
+    $unknownHash = Get-Hash $targetDinput
+    $unknownRejected = $false
+    try {
+        & $installers[0].FullName -GameDir $gameRoot -NonInteractive
+    }
+    catch {
+        $unknownRejected = $_.Exception.Message -like '*could not be identified as REFramework*'
+    }
+    if (-not $unknownRejected) {
+        throw 'The non-interactive installer did not safely reject an unknown dinput8.dll.'
+    }
+    if ((Get-Hash $targetDinput) -ne $unknownHash -or (Test-Path -LiteralPath $manifestPath)) {
+        throw 'The rejected installation changed the unknown dinput8.dll or created a manifest.'
+    }
+
+    # Declining the normal prompt must cancel cleanly and leave the unknown DLL
+    # untouched.
+    $global:DMC5DualSensePromptCount = 0
+    function Read-Host {
+        param([string]$Prompt)
+        $global:DMC5DualSensePromptCount++
+        return 'N'
+    }
+    try {
+        & $installers[0].FullName -GameDir $gameRoot
+    }
+    finally {
+        Remove-Item Function:\Read-Host -ErrorAction SilentlyContinue
+    }
+    if ($global:DMC5DualSensePromptCount -ne 1) {
+        throw "Expected one cancellation prompt, got $global:DMC5DualSensePromptCount."
+    }
+    Remove-Variable DMC5DualSensePromptCount -Scope Global -ErrorAction SilentlyContinue
+    if ((Get-Hash $targetDinput) -ne $unknownHash -or (Test-Path -LiteralPath $manifestPath)) {
+        throw 'Declining replacement changed the unknown dinput8.dll or created a manifest.'
+    }
+
+    # The normal interactive prompt must make replacement reversible without
+    # requiring the user to discover a PowerShell command-line switch.
+    $global:DMC5DualSensePromptCount = 0
+    function Read-Host {
+        param([string]$Prompt)
+        $global:DMC5DualSensePromptCount++
+        return 'Y'
+    }
+    try {
+        & $installers[0].FullName -GameDir $gameRoot
+    }
+    finally {
+        Remove-Item Function:\Read-Host -ErrorAction SilentlyContinue
+    }
+    if ($global:DMC5DualSensePromptCount -ne 1) {
+        throw "Expected one replacement prompt, got $global:DMC5DualSensePromptCount."
+    }
+    Remove-Variable DMC5DualSensePromptCount -Scope Global -ErrorAction SilentlyContinue
+    $replaceManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if ([string]$replaceManifest.Framework.Action -ne 'ReplaceExisting') {
+        throw "Expected ReplaceExisting, got $($replaceManifest.Framework.Action)."
+    }
+    if ((Get-Hash $targetDinput) -ne $bundledDinputHash) {
+        throw 'Interactive framework replacement did not install the bundled dinput8.dll.'
+    }
+    & (Join-Path $gameRoot 'DMC5DualSense\Uninstall.ps1') -GameDir $gameRoot
+    if ((Get-Hash $targetDinput) -ne $unknownHash) {
+        throw 'Uninstall did not restore the exact explicitly replaced dinput8.dll.'
+    }
+
+    # If another tool changes a replaced loader later, uninstall must preserve
+    # the newer file and retain our exact backup instead of overwriting either.
+    [IO.File]::WriteAllBytes($targetDinput, [Text.Encoding]::ASCII.GetBytes('MZ original proxy before explicit replacement'))
+    $originalBeforeReplacementHash = Get-Hash $targetDinput
+    & $installers[0].FullName -GameDir $gameRoot -ReplaceExistingFramework
+    [IO.File]::WriteAllBytes($targetDinput, [Text.Encoding]::ASCII.GetBytes('MZ proxy updated by another tool after installation'))
+    $changedAfterInstallHash = Get-Hash $targetDinput
+    & (Join-Path $gameRoot 'DMC5DualSense\Uninstall.ps1') -GameDir $gameRoot
+    if ((Get-Hash $targetDinput) -ne $changedAfterInstallHash) {
+        throw 'Uninstall overwrote a dinput8.dll changed by another tool.'
+    }
+    $retainedBackup = Join-Path $gameRoot 'DMC5DualSense\backup\dinput8.dll'
+    if (-not (Test-Path -LiteralPath $retainedBackup -PathType Leaf) -or
+        (Get-Hash $retainedBackup) -ne $originalBeforeReplacementHash) {
+        throw 'Uninstall did not retain the exact original backup after a third-party change.'
+    }
+
     [pscustomobject]@{
         Package = $zipPath
         PackageSha256 = Get-Hash $zipPath
         InstalledFilesVerified = @($manifest.Files).Count
         PakEntriesRestored = 3
+        FrameworkScenarios = @(
+            'CleanInstall',
+            'PreserveExisting',
+            'RejectUnknownNonInteractive',
+            'DeclinePromptWithoutChanges',
+            'PromptReplaceAndRestore',
+            'ChangedAfterInstallPreserved'
+        )
         GameLaunched = $false
         Result = 'PASS'
     } | ConvertTo-Json

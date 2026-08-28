@@ -1,17 +1,19 @@
 ﻿param(
     [string]$GameDir,
-    [switch]$AllowExistingFramework
+    [switch]$ReplaceExistingFramework,
+    [switch]$AllowExistingFramework,
+    [switch]$NonInteractive
 )
 
 $ErrorActionPreference = 'Stop'
-$packageVersion = '1.7.0-native'
+$packageVersion = '1.7.1-native'
 $releaseManifestSource = Join-Path $PSScriptRoot 'release-manifest.json'
 if (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf) {
     try {
         $releaseMetadata = Get-Content -LiteralPath $releaseManifestSource -Raw | ConvertFrom-Json
         if ($releaseMetadata.Version) { $packageVersion = [string]$releaseMetadata.Version }
     } catch {
-        throw "Повреждён release-manifest.json: $($_.Exception.Message)"
+        throw "release-manifest.json is invalid: $($_.Exception.Message)"
     }
 }
 
@@ -57,21 +59,21 @@ function Find-Dmc5Directory {
         }
     }
 
-    throw 'Devil May Cry 5 не найден. Передайте путь параметром -GameDir.'
+    throw 'Devil May Cry 5 was not found. Pass its directory with -GameDir.'
 }
 
 function Get-RelativePath([string]$Base, [string]$Path) {
     $baseFull = [IO.Path]::GetFullPath($Base).TrimEnd('\') + '\'
     $pathFull = [IO.Path]::GetFullPath($Path)
     if (-not $pathFull.StartsWith($baseFull, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Путь находится вне каталога игры: $pathFull"
+        throw "Path is outside the game directory: $pathFull"
     }
     return $pathFull.Substring($baseFull.Length)
 }
 
 function Invalidate-PakEntries([string]$PakPath, [object[]]$Targets) {
     if (-not (Test-Path -LiteralPath $PakPath -PathType Leaf)) {
-        throw "Главный PAK не найден: $PakPath"
+        throw "The main PAK was not found: $PakPath"
     }
 
     $stream = [IO.File]::Open(
@@ -92,10 +94,10 @@ function Invalidate-PakEntries([string]$PakPath, [object[]]$Targets) {
         [void]$reader.ReadUInt32()
 
         if ($magic -ne 0x414B504B -or $version -ne 4) {
-            throw "Неподдерживаемый формат PAK: magic=0x$($magic.ToString('X8')), version=$version"
+            throw "Unsupported PAK format: magic=0x$($magic.ToString('X8')), version=$version"
         }
         if (($flags -band 8) -ne 0) {
-            throw 'Зашифрованная таблица PAK не поддерживается безопасным установщиком.'
+            throw 'The safe installer does not support an encrypted PAK table.'
         }
 
         foreach ($target in $Targets) {
@@ -118,7 +120,7 @@ function Invalidate-PakEntries([string]$PakPath, [object[]]$Targets) {
             }
 
             if ($matches.Count -ne 1) {
-                throw "Ожидалась одна PAK-запись для $($target.Path), найдено: $($matches.Count)."
+                throw "Expected one PAK entry for $($target.Path), found $($matches.Count)."
             }
             $records.Add($matches[0])
         }
@@ -185,14 +187,58 @@ function Restore-PakInvalidations([string]$BaseDirectory, [object[]]$Invalidatio
     }
 }
 
+function Test-IsREFramework([string]$Path) {
+    try {
+        $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+        if ($item.Length -lt 64 -or $item.Length -gt 128MB) { return $false }
+        $stream = [IO.File]::OpenRead($item.FullName)
+        $reader = [IO.BinaryReader]::new($stream)
+        try {
+            if ($reader.ReadUInt16() -ne 0x5A4D) { return $false }
+            $stream.Position = 0x3C
+            $peOffset = $reader.ReadInt32()
+            if ($peOffset -lt 0 -or $peOffset -gt ($stream.Length - 6)) { return $false }
+            $stream.Position = $peOffset
+            if ($reader.ReadUInt32() -ne 0x00004550 -or $reader.ReadUInt16() -ne 0x8664) {
+                return $false
+            }
+        }
+        finally {
+            $reader.Dispose()
+            $stream.Dispose()
+        }
+        $binaryText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($item.FullName))
+        return $binaryText.IndexOf('REFramework', [StringComparison]::OrdinalIgnoreCase) -ge 0
+    }
+    catch {
+        return $false
+    }
+}
+
+function Confirm-UnknownFrameworkReplacement([string]$Path) {
+    if ($NonInteractive) {
+        throw 'An existing dinput8.dll was found, but it could not be identified as REFramework. Interactive confirmation is disabled, so the installer stopped without changing it.'
+    }
+
+    Write-Warning "An unknown dinput8.dll is already present: $Path"
+    Write-Host 'It may belong to another mod loader. DMC5DualSense can keep an exact backup, replace it with the bundled official REFramework loader, and restore the backup when this mod is uninstalled.' -ForegroundColor Yellow
+    $answer = Read-Host 'Replace it safely and keep a backup? [Y/N]'
+    return $answer -match '^(?i:y|yes)$'
+}
+
 $resolvedGameDir = Find-Dmc5Directory
 $gameExe = Join-Path $resolvedGameDir 'DevilMayCry5.exe'
 if (-not (Test-Path -LiteralPath $gameExe -PathType Leaf)) {
-    throw "В выбранной папке нет DevilMayCry5.exe: $resolvedGameDir"
+    throw "DevilMayCry5.exe was not found in the selected directory: $resolvedGameDir"
 }
 
 if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
-    throw 'Сначала закройте Devil May Cry 5.'
+    throw 'Close Devil May Cry 5 before installing the mod.'
+}
+
+if ($AllowExistingFramework) {
+    Write-Warning '-AllowExistingFramework is deprecated. It now behaves like -ReplaceExistingFramework.'
+    $ReplaceExistingFramework = $true
 }
 
 $dependencies = Join-Path $PSScriptRoot 'Dependencies'
@@ -202,13 +248,13 @@ $manifestPath = Join-Path $modDir 'install-manifest.json'
 if (Test-Path -LiteralPath $manifestPath) {
     $installedUninstaller = Join-Path $modDir 'Uninstall.ps1'
     if (-not (Test-Path -LiteralPath $installedUninstaller -PathType Leaf)) {
-        throw 'Найдена существующая установка без Uninstall.ps1. Восстановите её или удалите вручную перед обновлением.'
+        throw 'An existing installation has no Uninstall.ps1. Repair or remove it manually before updating.'
     }
 
-    Write-Host 'Найдена предыдущая версия. Выполняется безопасное обновление с сохранением настроек и журналов...' -ForegroundColor Cyan
+    Write-Host 'A previous version was found. Performing a safe update while preserving settings and logs...' -ForegroundColor Cyan
     & $installedUninstaller -GameDir $resolvedGameDir
     if (Test-Path -LiteralPath $manifestPath) {
-        throw 'Предыдущая версия не была полностью удалена; обновление остановлено.'
+        throw 'The previous version was not fully removed; the update has stopped.'
     }
 }
 if (Test-Path -LiteralPath $modDir -PathType Container) {
@@ -231,7 +277,7 @@ if (Test-Path -LiteralPath $modDir -PathType Container) {
     })
     if ($unexpected.Count -gt 0) {
         $unexpectedNames = ($unexpected | ForEach-Object Name) -join ', '
-        throw "Папка DMC5DualSense содержит неизвестные файлы без журнала установки: $unexpectedNames. Переименуйте папку или уберите эти файлы вручную."
+        throw "The DMC5DualSense directory contains unknown files without an installation manifest: $unexpectedNames. Rename the directory or move those files manually."
     }
 }
 
@@ -271,7 +317,7 @@ foreach ($required in @(
     (Join-Path $uiRoot 'natives\x64\ui\gui\ui8000\tex\ui8013_iam.tex.11')
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "В пакете отсутствует обязательный файл: $required"
+        throw "A required package file is missing: $required"
     }
 }
 
@@ -288,15 +334,37 @@ try {
     Expand-Archive -LiteralPath $frameworkZip -DestinationPath $frameworkExtract
 
     $incomingDinput = Get-ChildItem -LiteralPath $frameworkExtract -Filter 'dinput8.dll' -Recurse | Select-Object -First 1
-    if (-not $incomingDinput) { throw 'В REFramework.zip не найден dinput8.dll.' }
+    if (-not $incomingDinput) { throw 'REFramework.zip does not contain dinput8.dll.' }
 
     $targetDinput = Join-Path $resolvedGameDir 'dinput8.dll'
-    if ((Test-Path -LiteralPath $targetDinput) -and -not $AllowExistingFramework) {
-        $currentHash = (Get-FileHash -LiteralPath $targetDinput -Algorithm SHA256).Hash
-        $incomingHash = (Get-FileHash -LiteralPath $incomingDinput.FullName -Algorithm SHA256).Hash
-        if ($currentHash -ne $incomingHash) {
-            throw 'В игре уже есть другой dinput8.dll. Чтобы разрешить его резервное копирование и замену, запустите Install.ps1 с -AllowExistingFramework.'
+    $incomingHash = (Get-FileHash -LiteralPath $incomingDinput.FullName -Algorithm SHA256).Hash
+    $existingDinput = Test-Path -LiteralPath $targetDinput -PathType Leaf
+    $currentHash = if ($existingDinput) {
+        (Get-FileHash -LiteralPath $targetDinput -Algorithm SHA256).Hash
+    } else { $null }
+    $existingIsREFramework = $existingDinput -and (Test-IsREFramework $targetDinput)
+    $frameworkAction = 'InstallBundled'
+
+    if ($existingDinput -and $currentHash -eq $incomingHash) {
+        $frameworkAction = 'PreserveMatching'
+        Write-Host 'The bundled REFramework is already installed; the existing dinput8.dll will be preserved.' -ForegroundColor Cyan
+    }
+    elseif ($existingDinput -and $ReplaceExistingFramework) {
+        $frameworkAction = 'ReplaceExisting'
+        Write-Host 'The existing dinput8.dll will be backed up and replaced as explicitly requested.' -ForegroundColor Yellow
+    }
+    elseif ($existingIsREFramework) {
+        $frameworkAction = 'PreserveExisting'
+        Write-Host 'An existing REFramework installation was detected. Its dinput8.dll will be preserved so other REFramework mods remain intact.' -ForegroundColor Cyan
+        Write-Host 'The native plugin supports REFramework Plugin API 1.10 or newer. If an older build rejects it, rerun Install.ps1 with -ReplaceExistingFramework; the original DLL will be backed up and restored on uninstall.' -ForegroundColor Yellow
+    }
+    elseif ($existingDinput) {
+        if (-not (Confirm-UnknownFrameworkReplacement $targetDinput)) {
+            Write-Host 'Installation cancelled. The existing dinput8.dll was not changed.' -ForegroundColor Yellow
+            return
         }
+        $frameworkAction = 'ReplaceExisting'
+        Write-Host 'The existing dinput8.dll will be backed up and replaced.' -ForegroundColor Yellow
     }
 
     New-Item -ItemType Directory -Path $modDir -Force | Out-Null
@@ -325,6 +393,7 @@ try {
             RelativePath = $relative
             Existed = $existed
             BackupRelativePath = $backupRelative
+            OriginalSha256 = if ($existed) { (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash } else { $null }
             InstalledSha256 = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash
         })
     }
@@ -345,7 +414,9 @@ try {
         Remove-Item -LiteralPath $Target -Force
     }
 
-    Install-OneFile $incomingDinput.FullName $targetDinput
+    if ($frameworkAction -in @('InstallBundled', 'ReplaceExisting')) {
+        Install-OneFile $incomingDinput.FullName $targetDinput
+    }
 
     # REFramework defaults to an open overlay. MenuOpen is applied only when
     # RememberMenuState is enabled, so setting MenuOpen=false by itself does not
@@ -445,6 +516,12 @@ try {
         Version = $packageVersion
         InstalledUtc = [DateTime]::UtcNow.ToString('O')
         GameDirectory = $resolvedGameDir
+        Framework = [pscustomobject]@{
+            Action = $frameworkAction
+            ExistingSha256 = $currentHash
+            BundledSha256 = $incomingHash
+            ExistingRecognizedAsREFramework = $existingIsREFramework
+        }
         Files = $records
         RemovedFiles = $removedRecords
         CreatedDirectories = $createdDirectories
@@ -453,15 +530,15 @@ try {
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
     Write-Host ''
-    Write-Host 'DMC5 DualSense Layer Native C++ установлен.' -ForegroundColor Green
-    Write-Host "Игра: $resolvedGameDir"
-    Write-Host 'Bridge запускается только на время DMC5 и закрывается вместе с игрой.'
-    Write-Host 'Ввод и тачпад остаются штатному Steam Input; Bridge отправляет только отклик DualSense.'
-    Write-Host 'Для работы мода не нужны .NET, ViGEm, виртуальный геймпад или отдельный драйвер.'
-    Write-Host 'Для DMC5 оставьте Steam Input включённым или выберите «Использовать настройки по умолчанию».' -ForegroundColor Yellow
-    Write-Host 'Подключите DualSense по USB и запускайте игру обычной кнопкой «Играть» в Steam.'
-    Write-Host 'Параметры запуска Steam для мода не нужны.' -ForegroundColor Green
-    Write-Host 'Если вы обновились со старой версии, удалите прежнюю строку DMC5DualSense.Launcher из параметров запуска.' -ForegroundColor Yellow
+    Write-Host 'DMC5 DualSense Layer Native C++ was installed successfully.' -ForegroundColor Green
+    Write-Host "Game directory: $resolvedGameDir"
+    Write-Host 'The Bridge runs only while DMC5 is running and exits with the game.'
+    Write-Host 'Steam Input continues to own gameplay input and the touchpad; the Bridge sends DualSense feedback only.'
+    Write-Host 'This build does not require .NET, ViGEm, a virtual controller, or a separate driver.'
+    Write-Host 'Keep Steam Input enabled for DMC5 or select Use default settings.' -ForegroundColor Yellow
+    Write-Host 'Connect the DualSense over USB and start the game normally with Steam Play.'
+    Write-Host 'No Steam Launch Options are required for this mod.' -ForegroundColor Green
+    Write-Host 'If you upgraded from an old release, remove its DMC5DualSense.Launcher entry from Steam Launch Options.' -ForegroundColor Yellow
 }
 catch {
     Restore-PakInvalidations $resolvedGameDir @($pakInvalidations)

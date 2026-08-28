@@ -115,6 +115,17 @@ if ($Configuration -eq 'Release') {
     if ($LASTEXITCODE -ne 0) { throw "Native plugin strip failed with code $LASTEXITCODE." }
 }
 
+$pluginVersionTestOutput = Join-Path $outputRoot 'DMC5DualSense.PluginVersionTests.exe'
+& $compiler `
+    '-std=c++20' '-DUNICODE' '-D_UNICODE' '-DWIN32_LEAN_AND_MEAN' `
+    '-D_WIN32_WINNT=0x0A00' '-O2' '-DNDEBUG' '-static' `
+    '-static-libgcc' '-static-libstdc++' '-municode' '-Wl,--no-insert-timestamp' `
+    (Join-Path $PSScriptRoot 'Tests\plugin_version_test.cpp') `
+    '-o' $pluginVersionTestOutput
+if ($LASTEXITCODE -ne 0) { throw "Native plugin version test build failed with code $LASTEXITCODE." }
+& $pluginVersionTestOutput $pluginOutput
+if ($LASTEXITCODE -ne 0) { throw "Native plugin version test failed with code $LASTEXITCODE." }
+
 $testOutput = Join-Path $outputRoot 'DMC5DualSense.NativeTests.exe'
 $testArguments = @(
     '-std=c++20', '-DUNICODE', '-D_UNICODE', '-DWIN32_LEAN_AND_MEAN',

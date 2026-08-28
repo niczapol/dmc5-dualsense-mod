@@ -18,7 +18,10 @@ input explicit on a clean workstation.
 After building, validate the actual ZIP against a generated clean mock Steam
 library. The smoke test installs every packaged file, verifies the manifest and
 PAK changes, uninstalls, and verifies the exact rollback without launching the
-game:
+game. It also covers REFramework coexistence: preservation of a different
+recognized build, non-interactive rejection of an unknown proxy DLL, prompted replacement, and
+exact restoration, including protection when another tool changes the loader
+after installation:
 
 ```powershell
 .\Tools\Test-CleanInstall.ps1 `

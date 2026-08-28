@@ -36,16 +36,16 @@ if (-not $GameDir) {
     }
 }
 
-if (-not $GameDir) { throw 'Не найдена установленная копия мода. Передайте -GameDir вручную.' }
+if (-not $GameDir) { throw 'The installed mod was not found. Pass the game directory with -GameDir.' }
 $resolvedGameDir = [IO.Path]::GetFullPath($GameDir)
 $modDir = Join-Path $resolvedGameDir 'DMC5DualSense'
 $manifestPath = Join-Path $modDir 'install-manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-    throw "Журнал установки не найден: $manifestPath"
+    throw "The installation manifest was not found: $manifestPath"
 }
 
 if (Get-Process -Name 'DevilMayCry5' -ErrorAction SilentlyContinue) {
-    throw 'Сначала закройте Devil May Cry 5.'
+    throw 'Close Devil May Cry 5 before uninstalling the mod.'
 }
 
 Get-Process -Name 'DMC5DualSense.Bridge' -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -65,14 +65,14 @@ if ($manifest.PSObject.Properties['Autostart'] -and $manifest.Autostart) {
             Remove-ItemProperty -LiteralPath $autostart.RegistryPath -Name $autostart.ValueName -ErrorAction SilentlyContinue
         }
     } elseif ($null -ne $currentValue) {
-        Write-Warning 'Запись автозапуска была изменена после установки и оставлена как есть.'
+        Write-Warning 'The startup entry was changed after installation and was left unchanged.'
     }
 }
 
 foreach ($record in @($manifest.PakInvalidations)) {
     $pakPath = Join-Path $resolvedGameDir $record.PakRelativePath
     if (-not (Test-Path -LiteralPath $pakPath -PathType Leaf)) {
-        Write-Warning "PAK для отката не найден: $pakPath"
+        Write-Warning "The PAK required for rollback was not found: $pakPath"
         continue
     }
 
@@ -93,7 +93,7 @@ foreach ($record in @($manifest.PakInvalidations)) {
         if ($magic -ne 0x414B504B -or $version -ne 4 -or ($flags -band 8) -ne 0 -or
             [int64]$record.EntryOffset -ne $expectedOffset -or
             [int64]$record.EntryIndex -ge [int64]$entryCount) {
-            throw "Структура PAK изменилась; безопасный откат остановлен для $($record.ResourcePath)."
+            throw "The PAK structure changed; safe rollback stopped for $($record.ResourcePath)."
         }
 
         $stream.Position = [int64]$record.EntryOffset
@@ -108,7 +108,7 @@ foreach ($record in @($manifest.PakInvalidations)) {
         }
         elseif ($currentLower -ne [uint32]$record.OriginalHashLower -or
                 $currentUpper -ne [uint32]$record.OriginalHashUpper) {
-            Write-Warning "PAK-запись изменена другой программой и оставлена как есть: $($record.ResourcePath)"
+            Write-Warning "The PAK entry was changed by another program and was left unchanged: $($record.ResourcePath)"
         }
     }
     finally {
@@ -119,12 +119,21 @@ foreach ($record in @($manifest.PakInvalidations)) {
 }
 
 $manifestFiles = @($manifest.Files)
+$retainedBackup = $false
 for ($recordIndex = $manifestFiles.Count - 1; $recordIndex -ge 0; $recordIndex--) {
     $record = $manifestFiles[$recordIndex]
     $target = Join-Path $resolvedGameDir $record.RelativePath
     if ($record.Existed -and $record.BackupRelativePath) {
         $backup = Join-Path $modDir $record.BackupRelativePath
         if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            if (Test-Path -LiteralPath $target -PathType Leaf) {
+                $currentHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+                if ($currentHash -ne [string]$record.InstalledSha256) {
+                    Write-Warning "A pre-existing file was changed after installation and was left unchanged: $target"
+                    $retainedBackup = $true
+                    continue
+                }
+            }
             New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
             Copy-Item -LiteralPath $backup -Destination $target -Force
         }
@@ -133,7 +142,7 @@ for ($recordIndex = $manifestFiles.Count - 1; $recordIndex -ge 0; $recordIndex--
         if ($currentHash -eq $record.InstalledSha256) {
             Remove-Item -LiteralPath $target -Force
         } else {
-            Write-Warning "Файл изменён после установки и оставлен на месте: $target"
+            Write-Warning "A file was changed after installation and was left in place: $target"
         }
     }
 }
@@ -146,15 +155,19 @@ foreach ($relative in @($manifest.CreatedDirectories) | Sort-Object Length -Desc
 }
 
 $ownedBackup = Join-Path $modDir 'backup'
-if (Test-Path -LiteralPath $ownedBackup -PathType Container) {
+if (-not $retainedBackup -and (Test-Path -LiteralPath $ownedBackup -PathType Container)) {
     Remove-Item -LiteralPath $ownedBackup -Recurse -Force
 }
 Remove-Item -LiteralPath $manifestPath -Force
 
+if ($retainedBackup) {
+    Write-Warning "At least one pre-existing file changed after installation. Its original backup was retained in $ownedBackup. Move that backup somewhere safe before installing another DMC5DualSense version."
+}
+
 if ((Test-Path -LiteralPath $modDir -PathType Container) -and -not (Get-ChildItem -LiteralPath $modDir -Force)) {
     Remove-Item -LiteralPath $modDir -Force
-    Write-Host 'DMC5 DualSense Layer удалён; предыдущее состояние файлов восстановлено.' -ForegroundColor Green
+    Write-Host 'DMC5 DualSense Layer was removed and the previous file state was restored.' -ForegroundColor Green
 } else {
-    Write-Host 'Файлы мода удалены и предыдущее состояние восстановлено.' -ForegroundColor Green
-    Write-Warning "В $modDir оставлены изменённые настройки или журналы, не принадлежащие установщику."
+    Write-Host 'The mod files were removed and the previous file state was restored.' -ForegroundColor Green
+    Write-Warning "Changed settings or logs not owned by the installer remain in $modDir."
 }

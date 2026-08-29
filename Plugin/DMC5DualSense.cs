@@ -39,6 +39,7 @@ public static class DMC5DualSensePlugin
     private static int _lastAttackLargeButton = int.MinValue;
     private static int _lastSpecial2Button = int.MinValue;
     private static bool _padManagerLookupLogged;
+    private static bool _savedBindingContractErrorLogged;
     private static readonly object _activePlayerGate = new();
     private static ulong _activePlayerAddress;
     private static string _activePlayerCharacter = "unknown";
@@ -126,7 +127,7 @@ public static class DMC5DualSensePlugin
             var maxHp = SafeCallSingle(player, "get_maxHp");
             ReadMotion(player, out var motionBank, out var motionId, out var motionFrame);
             ReadGamePad(out var triggerLeft, out var triggerRight);
-            ReadGameActionBindings(out var attackLargeButton, out var special2Button);
+            ReadGameActionBindings(character, out var attackLargeButton, out var special2Button);
 
             var exceedGauge = 0f;
             var exceedGaugeMax = 0f;
@@ -214,6 +215,7 @@ public static class DMC5DualSensePlugin
     }
 
     private static void ReadGameActionBindings(
+        string character,
         out int attackLargeButton,
         out int special2Button)
     {
@@ -222,6 +224,28 @@ public static class DMC5DualSensePlugin
 
         try
         {
+            var savedAssign = ResolveSavedKeyAssign(character);
+            if (savedAssign is not null)
+            {
+                if (!TryReadSavedBindings(
+                        savedAssign, character, out attackLargeButton, out special2Button))
+                {
+                    if (!_savedBindingContractErrorLogged)
+                    {
+                        _savedBindingContractErrorLogged = true;
+                        LogError("Saved control contract could not resolve the active " +
+                                 "character's AttackL/Special2 links; stale PadInput " +
+                                 "values will not be used.");
+                    }
+                    return;
+                }
+
+                LogBindingsIfChanged(
+                    attackLargeButton, special2Button,
+                    "character SaveDataManager KeyAssign");
+                return;
+            }
+
             var padManager = ResolvePadManager();
             var keyAssign = ResolveKeyAssign(padManager);
             if (keyAssign is null)
@@ -236,17 +260,9 @@ public static class DMC5DualSensePlugin
                 "FindButton", GameActionAttackLarge));
             special2Button = ToInt(keyAssign.Call(
                 "FindButton", GameActionSpecial2));
-
-            if (attackLargeButton != _lastAttackLargeButton ||
-                special2Button != _lastSpecial2Button)
-            {
-                _lastAttackLargeButton = attackLargeButton;
-                _lastSpecial2Button = special2Button;
-                LogInfo("Control bindings: AttackL=0x" +
-                        attackLargeButton.ToString("X", CultureInfo.InvariantCulture) +
-                        ", Special2=0x" +
-                        special2Button.ToString("X", CultureInfo.InvariantCulture) + ".");
-            }
+            LogBindingsIfChanged(
+                attackLargeButton, special2Button,
+                "legacy PadManager fallback");
         }
         catch (Exception ex)
         {
@@ -254,6 +270,99 @@ public static class DMC5DualSensePlugin
             attackLargeButton = -1;
             special2Button = -1;
         }
+    }
+
+    private static IObject? ResolveSavedKeyAssign(string character)
+    {
+        var playerId = character switch
+        {
+            "nero" => 0,
+            "dante" => 1,
+            "v" => 2,
+            "vergil" => 4,
+            _ => -1
+        };
+        if (playerId < 0) return null;
+
+        var saveManager = API.GetManagedSingleton("app.SaveDataManager") as IObject;
+        return saveManager?.Call("getKeyAssignArray", playerId) as IObject;
+    }
+
+    private static bool TryReadSavedBindings(
+        IObject keyAssign,
+        string character,
+        out int attackLargeButton,
+        out int special2Button)
+    {
+        attackLargeButton = -1;
+        special2Button = -1;
+
+        var links = GetObjectField(
+            keyAssign, "LinkList", "<LinkList>k__BackingField");
+        if (links is null) return false;
+
+        var count = ToInt(links.Call("get_Count"));
+        if (count < 0 || count > 128) return false;
+        for (var index = 0; index < count; index++)
+        {
+            var link = links.Call("get_Item", index) as IObject;
+            if (link is null) continue;
+            var action = GetIntField(
+                link, "GameAction", "<GameAction>k__BackingField");
+            var button = GetIntField(
+                link, "Button", "<Button>k__BackingField");
+            if (action is null || button is null) continue;
+            if (action == GameActionAttackLarge) attackLargeButton = button.Value;
+            if (action == GameActionSpecial2) special2Button = button.Value;
+        }
+
+        return attackLargeButton >= 0 &&
+               (!character.Equals("nero", StringComparison.OrdinalIgnoreCase) ||
+                special2Button >= 0);
+    }
+
+    private static IObject? GetObjectField(IObject instance, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            try
+            {
+                if (instance.GetField(name) is IObject value) return value;
+            }
+            catch { }
+        }
+        return null;
+    }
+
+    private static int? GetIntField(IObject instance, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            try
+            {
+                var value = instance.GetField(name);
+                if (value is not null)
+                    return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            }
+            catch { }
+        }
+        return null;
+    }
+
+    private static void LogBindingsIfChanged(
+        int attackLargeButton,
+        int special2Button,
+        string source)
+    {
+        if (attackLargeButton == _lastAttackLargeButton &&
+            special2Button == _lastSpecial2Button) return;
+
+        _lastAttackLargeButton = attackLargeButton;
+        _lastSpecial2Button = special2Button;
+        LogInfo("Control bindings (" + source + "): AttackL=0x" +
+                attackLargeButton.ToString("X", CultureInfo.InvariantCulture) +
+                ", Exceed=0x" +
+                special2Button.ToString("X", CultureInfo.InvariantCulture) + ".");
     }
 
     private static void HideHostConsole()

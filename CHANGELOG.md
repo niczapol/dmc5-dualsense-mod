@@ -5,13 +5,13 @@ discarded test packages, and one-off diagnostics are intentionally omitted.
 
 ## 1.7.2 — Nero remap-aware resistance
 
-- Fixed the recommended native runtime reading Nero's saved controls from a
-  stale derived `PadInput` table. It now reads the active character-specific
+- Fixed both runtimes reading Nero's saved controls from a stale derived
+  `PadInput` table. They now read the active character-specific
   `SaveDataManager.KeyAssign` links used by DMC5's controls menu.
 - Blue Rose resistance now follows `AttackL` when it is reassigned to R2 while
   Exceed remains independently mapped to L2. Face-button assignments still
   leave the corresponding trigger free.
-- Made the native runtime fail closed if the authoritative saved binding table
+- Made both runtimes fail closed if the authoritative saved binding table
   exists but cannot be read, instead of silently accepting stale defaults.
 - Added deterministic coverage for saved Nero R2/L2 assignments and a live-log
   verifier for the in-game binding contract.

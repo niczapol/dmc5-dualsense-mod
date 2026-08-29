@@ -1,9 +1,12 @@
-# DMC5 DualSense Layer 1.7.1 — Managed C# fallback
+# DMC5 DualSense Layer 1.7.2 — Managed C# fallback
 
 This is the compatibility fallback for PCs where the recommended native C++
 build does not start correctly. It implements the same controller behavior but
 contains a much larger self-contained managed runtime. Try the Native C++ ZIP
 from GitHub Releases first.
+
+Version 1.7.2 reads Nero's current character-specific DMC5 control table, so
+Blue Rose resistance follows `AttackL` when the action is reassigned to R2.
 
 The mod adds adaptive triggers, advanced haptics, character lightbar
 colors, PlayStation button prompts, and an aligned DualSense controller diagram.

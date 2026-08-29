@@ -5,6 +5,8 @@
 
 #include <reframework/API.hpp>
 
+#include "runtime_contract.hpp"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -16,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <initializer_list>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -30,8 +33,10 @@ using Object = API::ManagedObject;
 using Clock = std::chrono::steady_clock;
 
 constexpr int kPort = 27105;
-constexpr int kGameActionAttackLarge = 1;
-constexpr int kGameActionSpecial2 = 14;
+constexpr int kGameActionAttackLarge =
+    dmc5ds::runtime_contract::kAttackLargeAction;
+constexpr int kGameActionSpecial2 =
+    dmc5ds::runtime_contract::kSpecial2Action;
 
 const REFrameworkPluginInitializeParam* g_param{};
 SOCKET g_udp{INVALID_SOCKET};
@@ -60,6 +65,7 @@ std::array<Clock::time_point, 132> g_last_motor_time{};
 int g_last_attack_large{INT32_MIN};
 int g_last_special2{INT32_MIN};
 bool g_pad_lookup_logged{};
+bool g_saved_binding_contract_error_logged{};
 
 thread_local Object* g_pending_dante_player{};
 thread_local int g_pending_dante_weapon{-1};
@@ -160,6 +166,21 @@ T call_arg(Object* object, std::string_view method, A argument, T fallback = T{}
     return target->call<T>(vm(), object, argument);
 }
 
+template <typename T>
+bool read_field(Object* object, const char* type_name,
+                std::initializer_list<const char*> field_names, T& value) {
+    if (object == nullptr) return false;
+    for (const auto* field_name : field_names) {
+        auto field = API::get()->tdb()->find_field(type_name, field_name);
+        if (field == nullptr) continue;
+        auto address = field->get_data_raw(object);
+        if (address == nullptr) continue;
+        value = *reinterpret_cast<const T*>(address);
+        return true;
+    }
+    return false;
+}
+
 Object* get_singleton(const char* name) {
     return API::get()->get_managed_singleton(name);
 }
@@ -233,25 +254,166 @@ Object* resolve_key_assign(Object* manager) {
     return call<Object*>(pad_input, "get_keyAssign");
 }
 
-void read_bindings(int& attack_large, int& special2) {
+Object* resolve_live_pad_input(Object* player) {
+    if (player == nullptr) return nullptr;
+
+    // CachedPadInput is the per-player object consumed by gameplay, but its
+    // derived keyAssignArray was observed retaining defaults after a saved
+    // character-specific remap. It is kept only as a compatibility fallback.
+    if (auto field = API::get()->tdb()->find_field("app.Player", "CachedPadInput")) {
+        if (auto address = field->get_data_raw(player); address != nullptr) {
+            if (auto pad_input = *reinterpret_cast<Object**>(address)) return pad_input;
+        }
+    }
+    if (auto getter = API::get()->tdb()->find_method("app.Player", "get_CachedPadInput"))
+        return getter->call<Object*>(vm(), player);
+    return nullptr;
+}
+
+int player_id_for_character(std::string_view character) {
+    if (character == "nero") return 0;
+    if (character == "dante") return 1;
+    if (character == "v") return 2;
+    if (character == "vergil") return 4;
+    return -1;
+}
+
+bool read_saved_bindings(std::string_view character, std::uint32_t& attack_large,
+                         std::uint32_t& special2, Object*& key_assign,
+                         Object*& link_list) {
+    const int player_id = player_id_for_character(character);
+    if (player_id < 0) return false;
+
+    auto save_manager = get_singleton("app.SaveDataManager");
+    auto get_key_assign = API::get()->tdb()->find_method(
+        "app.SaveDataManager", "getKeyAssignArray(System.Int32)");
+    if (save_manager == nullptr || get_key_assign == nullptr) return false;
+
+    // DMC5 stores one app.config.KeyAssign per character. This is the object
+    // edited by the controls menu and persisted in the save data. PadInput's
+    // derived array may still contain the defaults, so it is only a fallback.
+    key_assign = get_key_assign->call<Object*>(vm(), save_manager, player_id);
+    if (!read_field(key_assign, "app.config.KeyAssign",
+                    {"LinkList", "<LinkList>k__BackingField"}, link_list) ||
+        link_list == nullptr) {
+        if (!g_saved_binding_contract_error_logged) {
+            g_saved_binding_contract_error_logged = true;
+            log_error("Saved control contract failed at app.config.KeyAssign.LinkList; stale PadInput values will not be accepted as a successful remap read.");
+        }
+        return false;
+    }
+
+    const int count = call<int>(link_list, "get_Count", -1);
+    if (count < 0 || count > 128) return false;
+
+    std::vector<dmc5ds::runtime_contract::BindingLink> links;
+    links.reserve(static_cast<std::size_t>(count));
+    for (int index = 0; index < count; ++index) {
+        auto link = call_arg<Object*>(link_list, "get_Item", index);
+        if (link == nullptr) continue;
+        int action{-1};
+        std::uint32_t button{};
+        if (!read_field(link, "app.config.Link",
+                        {"GameAction", "<GameAction>k__BackingField"}, action) ||
+            !read_field(link, "app.config.Link",
+                        {"Button", "<Button>k__BackingField"}, button)) continue;
+        links.push_back({action, button});
+    }
+    const auto bindings = dmc5ds::runtime_contract::resolve_bindings(links);
+    attack_large = bindings.attack_large;
+    special2 = bindings.special2;
+    if (!bindings.complete_for(character) && !g_saved_binding_contract_error_logged) {
+        g_saved_binding_contract_error_logged = true;
+        log_error("Saved control contract produced no complete AttackL/Special2 mapping; adaptive resistance remains disabled for unconfirmed buttons.");
+    }
+    return bindings.complete_for(character);
+}
+
+Object* resolve_live_key_assign_array(Object* pad_input) {
+    if (pad_input == nullptr) return nullptr;
+    auto field = API::get()->tdb()->find_field(
+        "app.PadInput", "<keyAssignArray>k__BackingField");
+    if (field == nullptr) return nullptr;
+    auto address = field->get_data_raw(pad_input);
+    return address == nullptr ? nullptr : *reinterpret_cast<Object**>(address);
+}
+
+bool read_key_assign_array(Object* array, int action_index, std::uint32_t& button) {
+    if (array == nullptr || action_index < 0) return false;
+    auto length = API::get()->tdb()->find_method(
+        "System.Array", "GetLength(System.Int32)");
+    auto get_value = API::get()->tdb()->find_method(
+        "System.Array", "GetValue(System.Int32)");
+    if (length == nullptr || get_value == nullptr) return false;
+    const int count = length->call<int>(vm(), array, 0);
+    if (action_index >= count) return false;
+    auto boxed = get_value->call<Object*>(vm(), array, action_index);
+    if (boxed == nullptr) return false;
+
+    // System.Array.GetValue boxes the GamePadButton enum. RE Engine managed
+    // objects have a 0x10-byte header; the enum's UInt32 payload follows it.
+    button = *reinterpret_cast<const std::uint32_t*>(
+        reinterpret_cast<const std::uint8_t*>(boxed) + 0x10);
+    return true;
+}
+
+void read_bindings(Object* player, int& attack_large, int& special2) {
     attack_large = special2 = -1;
-    auto manager = resolve_pad_manager();
-    auto assign = resolve_key_assign(manager);
+    std::string source;
+    const auto character = detect_character(player);
+    std::uint32_t live_attack{UINT32_MAX}, live_exceed{UINT32_MAX};
+    Object* saved_assign{};
+    Object* saved_links{};
+    auto pad_input = resolve_live_pad_input(player);
+    auto key_assign_array = resolve_live_key_assign_array(pad_input);
+    if (read_saved_bindings(character, live_attack, live_exceed,
+                            saved_assign, saved_links)) {
+        attack_large = static_cast<int>(live_attack);
+        special2 = static_cast<int>(live_exceed);
+        source = "character SaveDataManager KeyAssign";
+    } else if (saved_assign == nullptr) {
+        const bool has_attack = read_key_assign_array(
+            key_assign_array, kGameActionAttackLarge, live_attack);
+        const bool has_exceed = read_key_assign_array(
+            key_assign_array, kGameActionSpecial2, live_exceed);
+        if (has_attack && has_exceed) {
+            attack_large = static_cast<int>(live_attack);
+            special2 = static_cast<int>(live_exceed);
+            source = "derived PadInput fallback";
+        }
+    } else {
+        source = "saved KeyAssign contract failure";
+    }
+
+    // Compatibility fallback only. It is intentionally lower priority because
+    // this global table was proven stale for Nero remaps in the current build.
+    const bool authoritative_unreadable = saved_assign != nullptr && attack_large < 0;
+    auto manager = attack_large >= 0 || authoritative_unreadable
+        ? nullptr : resolve_pad_manager();
+    auto assign = attack_large >= 0 || authoritative_unreadable
+        ? nullptr : resolve_key_assign(manager);
     if (assign == nullptr) {
-        if (!g_pad_lookup_logged) {
+        if (attack_large < 0 && !g_pad_lookup_logged) {
             g_pad_lookup_logged = true;
             log_info("Controller binding lookup unavailable; adaptive triggers remain off for unconfirmed buttons.");
         }
-        return;
+    } else {
+        attack_large = call_arg<int>(assign, "FindButton", kGameActionAttackLarge, -1);
+        special2 = call_arg<int>(assign, "FindButton", kGameActionSpecial2, -1);
+        source = "legacy PadManager fallback";
     }
-    attack_large = call_arg<int>(assign, "FindButton", kGameActionAttackLarge, -1);
-    special2 = call_arg<int>(assign, "FindButton", kGameActionSpecial2, -1);
     if (attack_large != g_last_attack_large || special2 != g_last_special2) {
         g_last_attack_large = attack_large;
         g_last_special2 = special2;
         std::ostringstream line;
-        line << "Control bindings: AttackL=0x" << std::hex << std::uppercase << attack_large
-             << ", Special2=0x" << special2 << '.';
+        line << "Control bindings (" << (source.empty() ? "unavailable" : source)
+             << "): AttackL=0x" << std::hex << std::uppercase << attack_large
+             << ", Exceed=0x" << special2
+             << ", savedAssign=0x" << reinterpret_cast<std::uintptr_t>(saved_assign)
+             << ", savedLinks=0x" << reinterpret_cast<std::uintptr_t>(saved_links)
+             << ", padInput=0x" << reinterpret_cast<std::uintptr_t>(pad_input)
+             << ", array=0x" << reinterpret_cast<std::uintptr_t>(key_assign_array)
+             << '.';
         log_info(line.str());
     }
 }
@@ -355,7 +517,7 @@ void on_update() {
         float left{}, right{};
         read_gamepad(left, right);
         int attack_large{}, special2{};
-        read_bindings(attack_large, special2);
+        read_bindings(player, attack_large, special2);
 
         float exceed{}, exceed_max{}, request_value{}, blue_timer{};
         int stock{}, charge_level{}, dante_weapon{-1};

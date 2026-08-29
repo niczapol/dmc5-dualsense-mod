@@ -1,4 +1,5 @@
 #include "../Bridge/core.hpp"
+#include "../Plugin/runtime_contract.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +41,17 @@ std::int32_t read_i32(const auto& payload, std::size_t offset) {
 int main() {
     BridgeConfig config{};
 
+    {
+        const dmc5ds::runtime_contract::BindingLink saved_links[]{
+            {1, 0x0800},
+            {14, 0x0200},
+            {2, 0x0040},
+        };
+        const auto bindings = dmc5ds::runtime_contract::resolve_bindings(saved_links);
+        check(bindings.complete_for("nero") &&
+              bindings.attack_large == 0x0800 && bindings.special2 == 0x0200,
+              "Saved Nero remap resolves AttackL=R2 and Exceed=L2");
+    }
     check(matches_dualsense_audio_endpoint(
               L"Динамики (DualSense Wireless Controller)",
               L"DualSense Wireless Controller"),

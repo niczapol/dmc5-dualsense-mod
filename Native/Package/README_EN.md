@@ -4,6 +4,9 @@ This is the recommended build of the Devil May Cry 5 Steam mod. It provides
 the complete feature set: binding-aware adaptive triggers, advanced haptics,
 character LED colors, and the DualSense interface artwork.
 
+Version 1.7.2 reads Nero's current character-specific DMC5 control table, so
+Blue Rose resistance follows `AttackL` when the action is reassigned to R2.
+
 ## Requirements
 
 - Windows x64 and a legitimate Steam copy of Devil May Cry 5;

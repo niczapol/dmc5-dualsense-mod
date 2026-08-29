@@ -9,12 +9,13 @@ controls menu and The Void.
 
 ## Which download should I use?
 
-Start with the **[Recommended version — lightweight](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.1/DMC5DualSense-Native-1.7.1-win-x64.zip)**
+Start with the **[Recommended version — lightweight](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.2/DMC5DualSense-Native-1.7.2-win-x64.zip)**
 (C++ build). If it does not start correctly on your PC, use the
 **[Compatibility version — fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.1/DMC5DualSense-Managed-1.7.1-win-x64.zip)**
-(C# build). Both provide the same controller features. The compatibility
-version is much larger because it includes its own .NET runtime; neither one
-requires additional software.
+(C# build). The compatibility version is much larger because it includes its
+own .NET runtime; neither one requires additional software. The latest
+character-specific remapping correction is currently available in the
+recommended build.
 
 Do not install both at once. Running either installer over the other performs a
 safe replacement while preserving user configuration and logs.

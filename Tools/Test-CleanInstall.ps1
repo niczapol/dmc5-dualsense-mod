@@ -69,17 +69,20 @@ try {
         throw "Expected one Install.ps1 in the release ZIP, found $($installers.Count)."
     }
 
-    $frameworkZips = @(Get-ChildItem -LiteralPath $extractRoot -Filter 'REFramework.zip' -File -Recurse)
-    if ($frameworkZips.Count -ne 1) {
-        throw "Expected one REFramework.zip in the release ZIP, found $($frameworkZips.Count)."
+    $archiveExtensions = @('.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.bz2', '.xz')
+    $nestedArchives = @(Get-ChildItem -LiteralPath $extractRoot -File -Recurse | Where-Object {
+        $_.Extension.ToLowerInvariant() -in $archiveExtensions
+    })
+    if ($nestedArchives.Count -gt 0) {
+        $nestedNames = ($nestedArchives | ForEach-Object FullName) -join ', '
+        throw "Release ZIP contains nested archives: $nestedNames"
     }
-    $frameworkRoot = Join-Path $workRoot 'framework'
-    Expand-Archive -LiteralPath $frameworkZips[0].FullName -DestinationPath $frameworkRoot
-    $bundledDinputs = @(Get-ChildItem -LiteralPath $frameworkRoot -Filter 'dinput8.dll' -File -Recurse)
-    if ($bundledDinputs.Count -ne 1) {
-        throw "Expected one bundled dinput8.dll, found $($bundledDinputs.Count)."
+
+    $packageRoot = Split-Path -Parent $installers[0].FullName
+    $bundledDinput = Join-Path $packageRoot 'Dependencies\REFramework\dinput8.dll'
+    if (-not (Test-Path -LiteralPath $bundledDinput -PathType Leaf)) {
+        throw "Expected flattened REFramework dinput8.dll: $bundledDinput"
     }
-    $bundledDinput = $bundledDinputs[0].FullName
     $bundledDinputHash = Get-Hash $bundledDinput
 
     New-Item -ItemType File -Path (Join-Path $gameRoot 'DevilMayCry5.exe') | Out-Null

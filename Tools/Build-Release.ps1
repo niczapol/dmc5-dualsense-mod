@@ -5,6 +5,7 @@ param(
     [string]$HapticsDirectory,
     [string]$UiDirectory,
     [string]$DependencyCache,
+    [string]$DotnetPath,
     [switch]$FrameworkDependent
 )
 
@@ -42,6 +43,28 @@ function Copy-ExactFile([string]$Source, [string]$Destination) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
+}
+
+function Expand-ExactArchive([string]$ArchivePath, [string]$Destination) {
+    if (Test-Path -LiteralPath $Destination) {
+        throw "Dependency extraction destination already exists: $Destination"
+    }
+    New-Item -ItemType Directory -Path $Destination | Out-Null
+    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $Destination
+    if (-not (Get-ChildItem -LiteralPath $Destination -File -Recurse | Select-Object -First 1)) {
+        throw "Pinned dependency archive is empty: $ArchivePath"
+    }
+}
+
+function Assert-NoNestedArchives([string]$Root) {
+    $archiveExtensions = @('.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.bz2', '.xz')
+    $nested = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.Extension.ToLowerInvariant() -in $archiveExtensions
+    })
+    if ($nested.Count -gt 0) {
+        $paths = ($nested | ForEach-Object FullName) -join ', '
+        throw "Nested archives are not allowed in a release package: $paths"
+    }
 }
 
 function Get-RelativeForwardPath([string]$Base, [string]$Path) {
@@ -137,12 +160,22 @@ foreach ($dependency in $assetManifest.Dependencies) {
 }
 
 $localDotnet = Join-Path $repoRoot '.dotnet\dotnet.exe'
-$dotnet = if (Test-Path -LiteralPath $localDotnet -PathType Leaf) {
+$dotnet = if ($DotnetPath) {
+    $resolvedDotnet = [IO.Path]::GetFullPath($DotnetPath)
+    if (-not (Test-Path -LiteralPath $resolvedDotnet -PathType Leaf)) {
+        throw "The requested .NET SDK executable does not exist: $resolvedDotnet"
+    }
+    $resolvedDotnet
+} elseif (Test-Path -LiteralPath $localDotnet -PathType Leaf) {
     $localDotnet
 } else {
     (Get-Command dotnet -ErrorAction Stop).Source
 }
-$dotnetVersion = (& $dotnet --version).Trim()
+$dotnetVersionOutput = & $dotnet --version
+if ($LASTEXITCODE -ne 0 -or -not $dotnetVersionOutput) {
+    throw "Unable to query the .NET SDK at $dotnet."
+}
+$dotnetVersion = ([string]$dotnetVersionOutput).Trim()
 if ($dotnetVersion -notmatch '^10\.') {
     throw ".NET SDK 10.x is required, found $dotnetVersion."
 }
@@ -199,10 +232,11 @@ foreach ($asset in $assetManifest.Ui) {
     $relative = ([string]$asset.Path).Replace('/', [IO.Path]::DirectorySeparatorChar)
     Copy-ExactFile (Join-Path $uiRoot $relative) (Join-Path (Join-Path $stageRoot 'UI') $relative)
 }
-foreach ($dependency in $assetManifest.Dependencies) {
-    $name = [string]$dependency.Name
-    Copy-ExactFile ([string]$dependencyFiles[$name]) (Join-Path (Join-Path $stageRoot 'Dependencies') $name)
-}
+Expand-ExactArchive ([string]$dependencyFiles['REFramework.zip']) `
+    (Join-Path $stageRoot 'Dependencies\REFramework')
+Expand-ExactArchive ([string]$dependencyFiles['csharp-api.zip']) `
+    (Join-Path $stageRoot 'Dependencies\CSharpAPI')
+Assert-NoNestedArchives $stageRoot
 
 $sourceCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
 $sourceDate = (& git -C $repoRoot show -s --format=%cI HEAD).Trim()
@@ -216,6 +250,7 @@ $buildInfo = @(
     "Controller: Sony DualSense USB VID_054C/PID_0CE6",
     "Input: Steam Input (native game path)",
     "Output: Steam Input DualSense API + WASAPI advanced haptics",
+    'Dependency packaging: flattened; no nested archives',
     "Asset manifest SHA256: $assetManifestHash",
     '',
     'This package passed deterministic logic tests and exact input hash validation.'

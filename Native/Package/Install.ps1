@@ -281,11 +281,12 @@ if (Test-Path -LiteralPath $modDir -PathType Container) {
     }
 }
 
-$frameworkZip = Join-Path $dependencies 'REFramework.zip'
+$frameworkRoot = Join-Path $dependencies 'REFramework'
+$incomingDinputPath = Join-Path $frameworkRoot 'dinput8.dll'
 $uiRoot = Join-Path $PSScriptRoot 'UI'
 $hapticsRoot = Join-Path $PSScriptRoot 'Haptics'
 foreach ($required in @(
-    $frameworkZip,
+    $incomingDinputPath,
     (Join-Path $PSScriptRoot 'DMC5DualSense.Bridge.exe'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.Launcher.exe'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.dll'),
@@ -330,11 +331,7 @@ $pakInvalidations = [Collections.Generic.List[object]]::new()
 
 try {
     New-Item -ItemType Directory -Path $temporary | Out-Null
-    $frameworkExtract = Join-Path $temporary 'framework'
-    Expand-Archive -LiteralPath $frameworkZip -DestinationPath $frameworkExtract
-
-    $incomingDinput = Get-ChildItem -LiteralPath $frameworkExtract -Filter 'dinput8.dll' -Recurse | Select-Object -First 1
-    if (-not $incomingDinput) { throw 'REFramework.zip does not contain dinput8.dll.' }
+    $incomingDinput = Get-Item -LiteralPath $incomingDinputPath
 
     $targetDinput = Join-Path $resolvedGameDir 'dinput8.dll'
     $incomingHash = (Get-FileHash -LiteralPath $incomingDinput.FullName -Algorithm SHA256).Hash

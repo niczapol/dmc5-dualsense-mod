@@ -18,3 +18,5 @@ Architecture:
 Run `Prepare-Dependencies.ps1` once, build with `build-native.ps1`, and create a
 deterministic end-user archive with `build-package.ps1`. UI and haptic media are
 external release inputs validated through the root `release-assets.json`.
+The package builder expands pinned dependencies into flat directories and
+rejects nested archives before creating the end-user ZIP.

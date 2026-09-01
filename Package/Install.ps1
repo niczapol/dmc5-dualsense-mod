@@ -280,12 +280,13 @@ if (Test-Path -LiteralPath $modDir -PathType Container) {
 }
 
 $dependencies = Join-Path $PSScriptRoot 'Dependencies'
-$frameworkZip = Join-Path $dependencies 'REFramework.zip'
-$csharpZip = Join-Path $dependencies 'csharp-api.zip'
+$frameworkRoot = Join-Path $dependencies 'REFramework'
+$csharpRoot = Join-Path $dependencies 'CSharpAPI\reframework'
+$incomingDinputPath = Join-Path $frameworkRoot 'dinput8.dll'
 $uiRoot = Join-Path $PSScriptRoot 'UI'
 foreach ($required in @(
-    $frameworkZip,
-    $csharpZip,
+    $incomingDinputPath,
+    (Join-Path $csharpRoot 'plugins\REFramework.NET.dll'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.Bridge.exe'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.Launcher.exe'),
     (Join-Path $PSScriptRoot 'DMC5DualSense.cs'),
@@ -317,13 +318,7 @@ $pakInvalidations = [Collections.Generic.List[object]]::new()
 
 try {
     New-Item -ItemType Directory -Path $temporary | Out-Null
-    $frameworkExtract = Join-Path $temporary 'framework'
-    $csharpExtract = Join-Path $temporary 'csharp'
-    Expand-Archive -LiteralPath $frameworkZip -DestinationPath $frameworkExtract
-    Expand-Archive -LiteralPath $csharpZip -DestinationPath $csharpExtract
-
-    $incomingDinput = Get-ChildItem -LiteralPath $frameworkExtract -Filter 'dinput8.dll' -Recurse | Select-Object -First 1
-    if (-not $incomingDinput) { throw 'REFramework.zip does not contain dinput8.dll.' }
+    $incomingDinput = Get-Item -LiteralPath $incomingDinputPath
 
     $targetDinput = Join-Path $resolvedGameDir 'dinput8.dll'
     $incomingHash = (Get-FileHash -LiteralPath $incomingDinput.FullName -Algorithm SHA256).Hash
@@ -428,7 +423,6 @@ try {
     [IO.File]::WriteAllLines($refConfigSource, $refConfigLines, [Text.UTF8Encoding]::new($false))
     Install-OneFile $refConfigSource $refConfigTarget
 
-    $csharpRoot = Join-Path $csharpExtract 'reframework'
     foreach ($source in Get-ChildItem -LiteralPath $csharpRoot -File -Recurse) {
         $relative = Get-RelativePath $csharpRoot $source.FullName
         Install-OneFile $source.FullName (Join-Path (Join-Path $resolvedGameDir 'reframework') $relative)

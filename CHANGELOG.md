@@ -3,6 +3,15 @@
 Only public version milestones are listed here. Internal calibration builds,
 discarded test packages, and one-off diagnostics are intentionally omitted.
 
+## 1.7.2-r1 — Scanner-friendly packaging revision
+
+- Flattened the pinned REFramework and C# API dependency payloads in both
+  downloads. The end-user ZIPs no longer contain archives inside archives.
+- Updated both installers to consume the flattened dependency directories
+  without changing gameplay, controller output, or coexistence behavior.
+- Added a release-build guard and clean-install assertion that reject nested
+  archives before a package can be published.
+
 ## 1.7.2 — Nero remap-aware resistance
 
 - Fixed both runtimes reading Nero's saved controls from a stale derived

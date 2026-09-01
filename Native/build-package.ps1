@@ -49,6 +49,28 @@ function Copy-File([string]$Source, [string]$Destination) {
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
 }
 
+function Expand-DependencyArchive([string]$ArchivePath, [string]$Destination) {
+    if (Test-Path -LiteralPath $Destination) {
+        throw "Dependency extraction destination already exists: $Destination"
+    }
+    New-Item -ItemType Directory -Path $Destination | Out-Null
+    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $Destination
+    if (-not (Get-ChildItem -LiteralPath $Destination -File -Recurse | Select-Object -First 1)) {
+        throw "Pinned dependency archive is empty: $ArchivePath"
+    }
+}
+
+function Assert-NoNestedArchives([string]$Root) {
+    $archiveExtensions = @('.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.bz2', '.xz')
+    $nested = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object {
+        $_.Extension.ToLowerInvariant() -in $archiveExtensions
+    })
+    if ($nested.Count -gt 0) {
+        $paths = ($nested | ForEach-Object FullName) -join ', '
+        throw "Nested archives are not allowed in a release package: $paths"
+    }
+}
+
 function Get-RelativeForwardPath([string]$Base, [string]$Path) {
     $baseFull = [IO.Path]::GetFullPath($Base).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     $pathFull = [IO.Path]::GetFullPath($Path)
@@ -171,8 +193,8 @@ foreach ($file in Get-ChildItem -LiteralPath $uiRoot -File -Recurse) {
     $relative = Get-RelativeForwardPath $uiRoot $file.FullName
     Copy-File $file.FullName (Join-Path (Join-Path $stageRoot 'UI') $relative)
 }
-Copy-File ([string]$dependencyByName['REFramework.zip']) `
-    (Join-Path $stageRoot 'Dependencies\REFramework.zip')
+Expand-DependencyArchive ([string]$dependencyByName['REFramework.zip']) `
+    (Join-Path $stageRoot 'Dependencies\REFramework')
 Copy-File (Join-Path $repoRoot 'Package\Licenses\REFramework-LICENSE.txt') `
     (Join-Path $stageRoot 'Licenses\REFramework-LICENSE.txt')
 Copy-File (Join-Path $nativeRoot 'third_party\nlohmann\LICENSE.MIT') `
@@ -189,10 +211,12 @@ $buildInfo = @(
     'Gameplay input and touchpad owner: Steam Input',
     'Controller output: SteamInput006 adaptive triggers, LED and rumble',
     'Advanced haptics: bundled samples through four-channel Windows WASAPI',
+    'Dependency packaging: flattened; no nested archives',
     'External driver/runtime dependencies: none',
     'Build mode: deterministic PE timestamps and statically linked C++ runtimes'
 ) -join "`n"
 Write-Utf8NoBom (Join-Path $stageRoot 'BUILD_INFO.txt') ($buildInfo + "`n")
+Assert-NoNestedArchives $stageRoot
 
 $files = Get-ChildItem -LiteralPath $stageRoot -File -Recurse |
     Sort-Object { Get-RelativeForwardPath $stageRoot $_.FullName } |

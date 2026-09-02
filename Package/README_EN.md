@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.7.2 — Managed C# fallback
+# DMC5 DualSense Layer 1.7.3 — Managed C# fallback
 
 This is the compatibility fallback for PCs where the recommended native C++
 build does not start correctly. It implements the same controller behavior but
@@ -104,6 +104,12 @@ Ordinary sword hits, Blue Rose hold, EX-Act, and MAX-Act use DMC5's standard
 combat feedback whenever the game emits it. V uses the purple character light
 and ordinary combat rumble; dedicated adaptive-trigger resistance is not part of
 his profile.
+
+Ordinary DMC5 rumble has one output owner (Steam Input), while advanced events
+use only the DualSense four-channel audio endpoint. A non-silent advanced event
+briefly takes actuator priority so the two paths cannot fight each other. Each
+motor channel has its own 180 ms watchdog, and overlapping haptic waveforms pass
+through a soft limiter instead of hard digital clipping.
 
 ## Configuration and diagnostics
 

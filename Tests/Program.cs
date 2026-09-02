@@ -144,6 +144,72 @@ Run("Steam Input trigger payload preserves independent PS5 weapon sides", () =>
     Equal((byte)5, payload[data + 2]);
 });
 
+Run("independent rumble watchdogs cannot extend a stale opposite motor", () =>
+{
+    var rumble = new RumbleRuntime();
+    var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    rumble.SetGameMotor(0, 1f, start);
+    rumble.SetGameMotor(1, 0.5f, start);
+    var active = rumble.GetOutput(start.AddMilliseconds(100));
+    rumble.SetGameMotor(0, 0f, start.AddMilliseconds(150));
+    var expired = rumble.GetOutput(start.AddMilliseconds(200));
+    Equal((byte)255, active.Low);
+    Equal(true, active.High is >= 127 and <= 128);
+    Equal(new RumbleOutput(0, 0), expired);
+});
+
+Run("trigger-motor aliases are isolated and attenuated", () =>
+{
+    var rumble = new RumbleRuntime();
+    var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    rumble.SetGameMotor(130, 1f, start);
+    var output = rumble.GetOutput(start.AddMilliseconds(10));
+    Equal(true, output.Low is >= 139 and <= 141);
+    Equal((byte)0, output.High);
+});
+
+Run("advanced-haptics limiter is transparent and bounded", () =>
+{
+    Equal(0.5, HapticOutputSafety.SoftLimit(0.5));
+    var hot = HapticOutputSafety.SoftLimit(2.51);
+    var negative = HapticOutputSafety.SoftLimit(-2.51);
+    Equal(true, hot is > 0.99 and < 1.0);
+    Equal(true, Math.Abs(hot + negative) < 0.000001);
+});
+
+Run("advanced haptics take exclusive actuator priority", () =>
+{
+    var ordinary = new RumbleOutput(180, 90);
+    Equal(ordinary, HapticOutputSafety.Arbitrate(ordinary, false));
+    Equal(new RumbleOutput(0, 0), HapticOutputSafety.Arbitrate(ordinary, true));
+});
+
+Run("ordinary DMC5 rumble never enters the advanced audio bus", () =>
+{
+    using var haptics = new HapticEngine(1f, loadOriginalSamples: false);
+    haptics.SetGameMotor(0, 1f);
+    var buffer = new byte[48_000 / 10 * 4 * sizeof(short)];
+    haptics.Read(buffer, 0, buffer.Length);
+    Equal(true, buffer.All(value => value == 0));
+    Equal(true, haptics.GetRumbleOutput().Low > 0);
+});
+
+Run("overlapping advanced haptics are smoothly limited without int16 clipping", () =>
+{
+    using var haptics = new HapticEngine(1f, loadOriginalSamples: false);
+    haptics.Pulse(1f, 1f, 0.5f);
+    haptics.Pulse(1f, 1f, 0.5f);
+    var buffer = new byte[48_000 / 2 * 4 * sizeof(short)];
+    haptics.Read(buffer, 0, buffer.Length);
+    var actuatorSamples = Enumerable.Range(0, buffer.Length / 2)
+        .Where(index => index % 4 is 2 or 3)
+        .Select(index => BitConverter.ToInt16(buffer, index * 2))
+        .ToArray();
+    Equal(true, actuatorSamples.Any(value => value != 0));
+    Equal(true, actuatorSamples.All(value => value is > short.MinValue and < short.MaxValue));
+    Equal(true, haptics.GetAndResetRenderDiagnostic().LimitedFrames > 0);
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, failures));

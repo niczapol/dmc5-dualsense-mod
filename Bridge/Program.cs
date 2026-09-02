@@ -262,7 +262,8 @@ internal static class Program
                     .Select(pair => $"{pair.Key}:{pair.Value}"));
                 log($"Telemetry 5s: motor={motorPackets}, padshake={padShakePackets}, " +
                     $"events=[{eventSummary}], original=[{hapticSummary}], " +
-                    $"audio={audio.NonZeroFrames}/{audio.Frames} frames, peak={audio.Peak:0.000}, " +
+                    $"audio={audio.NonZeroFrames}/{audio.Frames} frames, " +
+                    $"limited={audio.LimitedFrames}, peak={audio.Peak:0.000}, " +
                     $"state={audio.PlaybackState}.");
             }
 
@@ -349,7 +350,7 @@ internal static class Program
                     break;
 
                 case "rumble":
-                    haptics.Pulse(message.Left, message.Right, message.Duration);
+                    haptics.RumblePulse(message.Left, message.Right, message.Duration);
                     break;
 
                 case "padshake":

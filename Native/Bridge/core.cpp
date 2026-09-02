@@ -151,6 +151,87 @@ AudioEndpointMatch classify_dualsense_audio_endpoint(
     return {0, "not a DualSense haptics endpoint"};
 }
 
+RumbleRuntime::RumbleRuntime(float strength)
+    : strength_(std::clamp(strength, 0.0F, 1.0F)) {}
+
+int RumbleRuntime::normalize_motor(int motor) {
+    if (motor >= 128 && motor <= 131) motor -= 128;
+    return motor >= 0 && motor < 4 ? motor : -1;
+}
+
+void RumbleRuntime::set_game_motor(int motor, float power, TimePoint now) {
+    const int index = normalize_motor(motor);
+    if (index < 0) return;
+    motors_[index].power = std::clamp(power, 0.0F, 1.0F);
+    motors_[index].until = now + std::chrono::milliseconds(180);
+    last_motor_signal_ = now;
+}
+
+float RumbleRuntime::transient_value(TransientMotor& motor, TimePoint now) {
+    if (motor.until.time_since_epoch().count() == 0 || now >= motor.until) {
+        motor.power = 0.0F;
+        return 0.0F;
+    }
+    const auto total = std::max(0.001,
+        std::chrono::duration<double>(motor.until - motor.start).count());
+    const auto remaining = std::clamp(
+        std::chrono::duration<double>(motor.until - now).count() / total, 0.0, 1.0);
+    return motor.power * static_cast<float>(std::sqrt(remaining));
+}
+
+void RumbleRuntime::pulse(float low, float high, float duration, TimePoint now) {
+    low = std::clamp(low, 0.0F, 1.0F);
+    high = std::clamp(high, 0.0F, 1.0F);
+    duration = std::clamp(duration <= 0.0F ? 0.08F : duration, 0.025F, 1.5F);
+    const auto until = now + std::chrono::duration_cast<Clock::duration>(
+        std::chrono::duration<float>(duration));
+    const auto update = [&](TransientMotor& motor, float power) {
+        if (power <= 0.0F) return;
+        const float current = transient_value(motor, now);
+        motor.power = std::max(current, power);
+        motor.start = now;
+        motor.until = std::max(motor.until, until);
+    };
+    update(transient_low_, low);
+    update(transient_high_, high);
+}
+
+bool RumbleRuntime::has_recent_game_motor(std::chrono::milliseconds age,
+                                           TimePoint now) const {
+    return last_motor_signal_.time_since_epoch().count() != 0 &&
+           now - last_motor_signal_ < age;
+}
+
+RumbleOutput RumbleRuntime::output(TimePoint now) {
+    const auto active = [&](int index) {
+        return now < motors_[index].until ? motors_[index].power : 0.0F;
+    };
+    float low = std::max(active(0), active(2) * 0.55F);
+    float high = std::max(active(1), active(3) * 0.55F);
+    low = std::max(low, transient_value(transient_low_, now)) * strength_;
+    high = std::max(high, transient_value(transient_high_, now)) * strength_;
+    return {
+        static_cast<std::uint8_t>(std::clamp(
+            static_cast<int>(std::nearbyint(low * 255.0F)), 0, 255)),
+        static_cast<std::uint8_t>(std::clamp(
+            static_cast<int>(std::nearbyint(high * 255.0F)), 0, 255))
+    };
+}
+
+double soft_limit_haptic(double value) {
+    if (!std::isfinite(value)) return 0.0;
+    constexpr double knee = 0.90;
+    const double magnitude = std::abs(value);
+    if (magnitude <= knee) return value;
+    const double limited = knee + (1.0 - knee) *
+        (1.0 - std::exp(-(magnitude - knee) / (1.0 - knee)));
+    return std::copysign(std::min(limited, 0.999969), value);
+}
+
+RumbleOutput arbitrate_rumble(RumbleOutput ordinary, bool advanced_haptics_active) {
+    return advanced_haptics_active ? RumbleOutput{} : ordinary;
+}
+
 TriggerEffect TriggerEffect::off() { return {}; }
 TriggerEffect TriggerEffect::feedback(std::uint8_t position, std::uint8_t strength) {
     return {TriggerMode::feedback, position, strength};

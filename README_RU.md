@@ -9,9 +9,9 @@ DualSense в настройках управления и режиме «Пус�
 
 ## Какую версию скачивать?
 
-Сначала скачайте **[Рекомендуемую версию — лёгкую](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.2/DMC5DualSense-Native-1.7.2-win-x64.zip)**
+Сначала скачайте **[Рекомендуемую версию — лёгкую](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.3/DMC5DualSense-Native-1.7.3-win-x64.zip)**
 (сборка на C++). Если она не запускается именно на вашем компьютере, используйте
-**[Версию для совместимости — резервную](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.2/DMC5DualSense-Managed-1.7.2-win-x64.zip)**
+**[Версию для совместимости — резервную](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.3/DMC5DualSense-Managed-1.7.3-win-x64.zip)**
 (сборка на C#). Обе версии реализуют одинаковое поведение контроллера. Резервный
 архив значительно больше из-за встроенного .NET runtime; отдельно устанавливать
 дополнительные компоненты не требуется.

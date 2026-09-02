@@ -13,33 +13,31 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
     private readonly List<SampleVoice> _sampleVoices = [];
     private readonly Dictionary<string, SampleDefinition> _samples;
     private readonly float _strength;
+    private readonly RumbleRuntime _rumble;
     private WasapiOut? _output;
     private MMDevice? _audioDevice;
     private float? _previousEndpointVolume;
     private bool? _previousEndpointMute;
     private float? _managedEndpointVolume;
     private string _status = "disabled";
-    private float _continuousLow;
-    private float _continuousHigh;
-    private float _virtualLow;
-    private float _virtualHigh;
-    private double _continuousLowPhase;
-    private double _continuousHighPhase;
-    private DateTime _continuousUntilUtc;
-    private DateTime _lastMotorSignalUtc;
-    private float _transientRumbleLow;
-    private float _transientRumbleHigh;
-    private DateTime _transientRumbleStartUtc;
-    private DateTime _transientRumbleUntilUtc;
+    private DateTime _advancedHapticsUntilUtc;
     private long _renderedFrames;
     private long _nonZeroRenderedFrames;
+    private long _limitedFrames;
     private float _renderPeak;
 
-    public HapticEngine(float strength)
+    public HapticEngine(float strength) : this(strength, loadOriginalSamples: true)
+    {
+    }
+
+    internal HapticEngine(float strength, bool loadOriginalSamples)
     {
         _strength = Math.Clamp(strength, 0f, 1f);
+        _rumble = new RumbleRuntime(_strength);
         WaveFormat = new WaveFormatExtensible(SampleRate, 16, ChannelCount);
-        _samples = LoadOriginalSamples();
+        _samples = loadOriginalSamples
+            ? LoadOriginalSamples()
+            : new Dictionary<string, SampleDefinition>(StringComparer.OrdinalIgnoreCase);
     }
 
     public WaveFormat WaveFormat { get; }
@@ -298,12 +296,6 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
         lock (_gate)
         {
-            var now = DateTime.UtcNow;
-            _transientRumbleLow = Math.Max(_transientRumbleLow, lowMotor * _strength);
-            _transientRumbleHigh = Math.Max(_transientRumbleHigh, highMotor * _strength);
-            _transientRumbleStartUtc = now;
-            _transientRumbleUntilUtc = now.AddSeconds(durationSeconds);
-
             _voices.Add(new Voice(
                 remainingSamples: (int)(SampleRate * durationSeconds),
                 totalSamples: (int)(SampleRate * durationSeconds),
@@ -319,6 +311,11 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         }
     }
 
+    public void RumblePulse(float lowMotor, float highMotor, float durationSeconds)
+    {
+        lock (_gate) _rumble.Pulse(lowMotor, highMotor, durationSeconds);
+    }
+
     public void Impact(float amount = 1f)
     {
         amount = Math.Clamp(amount, 0f, 1f);
@@ -331,61 +328,31 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         {
             // The low-level motor hook supplies the exact live envelope. PadShake is
             // retained as a fallback for code paths that do not reach setMotorPower.
-            if (DateTime.UtcNow - _lastMotorSignalUtc < TimeSpan.FromMilliseconds(120))
+            if (_rumble.HasRecentGameMotor(TimeSpan.FromMilliseconds(120)))
                 return;
-        }
-
-        power = Math.Clamp(power, 0f, 1f);
-        switch (motor)
-        {
-            case 1: // BothMotor
-                Pulse(power, power, durationSeconds);
-                break;
-            case 2: // LowMotor
-                Pulse(power, 0, durationSeconds);
-                break;
-            case 3: // HigtMotor (spelling used by DMC5 metadata)
-                Pulse(0, power, durationSeconds);
-                break;
+            power = Math.Clamp(power, 0f, 1f);
+            switch (motor)
+            {
+                case 1: // BothMotor
+                    _rumble.Pulse(power, power, durationSeconds);
+                    break;
+                case 2: // LowMotor
+                    _rumble.Pulse(power, 0, durationSeconds);
+                    break;
+                case 3: // HigtMotor (spelling used by DMC5 metadata)
+                    _rumble.Pulse(0, power, durationSeconds);
+                    break;
+            }
         }
     }
 
-    public (byte Low, byte High) GetRumbleOutput()
+    public RumbleOutput GetRumbleOutput()
     {
         lock (_gate)
         {
             var now = DateTime.UtcNow;
-            var low = 0f;
-            var high = 0f;
-
-            if (now < _transientRumbleUntilUtc)
-            {
-                var total = Math.Max(0.001,
-                    (_transientRumbleUntilUtc - _transientRumbleStartUtc).TotalSeconds);
-                var remaining = Math.Clamp(
-                    (_transientRumbleUntilUtc - now).TotalSeconds / total, 0.0, 1.0);
-                var envelope = (float)Math.Sqrt(remaining);
-                low = _transientRumbleLow * envelope;
-                high = _transientRumbleHigh * envelope;
-            }
-            else
-            {
-                _transientRumbleLow = 0;
-                _transientRumbleHigh = 0;
-            }
-
-            if (now < _continuousUntilUtc)
-            {
-                low = Math.Max(low, _continuousLow * _strength);
-                high = Math.Max(high, _continuousHigh * _strength);
-            }
-
-            low = Math.Max(low, _virtualLow * _strength);
-            high = Math.Max(high, _virtualHigh * _strength);
-
-            return (
-                (byte)Math.Clamp((int)Math.Round(low * 255f), 0, 255),
-                (byte)Math.Clamp((int)Math.Round(high * 255f), 0, 255));
+            return HapticOutputSafety.Arbitrate(
+                _rumble.GetOutput(now), now < _advancedHapticsUntilUtc);
         }
     }
 
@@ -414,46 +381,7 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
     public void SetGameMotor(int motor, float power)
     {
-        power = Math.Clamp(power, 0f, 1f);
-        lock (_gate)
-        {
-            switch (motor)
-            {
-                case 0:
-                case 128: // LowFrequencyMotor
-                    _continuousLow = power;
-                    break;
-                case 1:
-                case 129: // HighFrequencyMotor
-                    _continuousHigh = power;
-                    break;
-                case 2:
-                case 130: // LAnalogTriggerMotor on platforms that expose it
-                    _continuousLow = power * 0.55f;
-                    break;
-                case 3:
-                case 131: // RAnalogTriggerMotor
-                    _continuousHigh = power * 0.55f;
-                    break;
-                default:
-                    return;
-            }
-
-            _lastMotorSignalUtc = DateTime.UtcNow;
-            // DMC5 does not consistently emit a final zero command. Repeated live
-            // motor packets arrive at least every 120 ms, so a short watchdog
-            // removes the otherwise multi-second rumble tail after an attack.
-            _continuousUntilUtc = _lastMotorSignalUtc.AddMilliseconds(180);
-        }
-    }
-
-    public void SetVirtualRumble(byte largeMotor, byte smallMotor)
-    {
-        lock (_gate)
-        {
-            _virtualLow = largeMotor / 255f;
-            _virtualHigh = smallMotor / 255f;
-        }
+        lock (_gate) _rumble.SetGameMotor(motor, power);
     }
 
     public int Read(byte[] buffer, int offset, int count)
@@ -464,30 +392,20 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
         lock (_gate)
         {
-            var pluginMotorActive = DateTime.UtcNow < _continuousUntilUtc;
-            var activeLow = Math.Max(pluginMotorActive ? _continuousLow : 0f, _virtualLow) * _strength;
-            var activeHigh = Math.Max(pluginMotorActive ? _continuousHigh : 0f, _virtualHigh) * _strength;
-            var continuousActive = activeLow > 0.0001f || activeHigh > 0.0001f;
+            var now = DateTime.UtcNow;
+            var priorityUntil = now.AddSeconds(frameCount / (double)SampleRate)
+                .AddMilliseconds(50);
             for (var frame = 0; frame < frameCount; frame++)
             {
                 double left = 0;
                 double right = 0;
+                var advancedFrame = MixGeneratedVoices(ref left, ref right);
+                advancedFrame |= MixOriginalSamples(ref left, ref right);
+                if (advancedFrame) _advancedHapticsUntilUtc = priorityUntil;
+                if (Math.Abs(left) > 0.90 || Math.Abs(right) > 0.90) _limitedFrames++;
 
-                if (continuousActive)
-                {
-                    _continuousLowPhase += 2.0 * Math.PI * 72.0 / SampleRate;
-                    _continuousHighPhase += 2.0 * Math.PI * 162.0 / SampleRate;
-                    var low = Math.Sin(_continuousLowPhase) * activeLow;
-                    var high = Math.Sin(_continuousHighPhase) * activeHigh;
-                    left += (low + high * 0.56) * 0.64;
-                    right += (low * 0.86 + high * 0.82) * 0.64;
-                }
-
-                MixGeneratedVoices(ref left, ref right);
-                MixOriginalSamples(ref left, ref right);
-
-                var leftSample = ToInt16(left);
-                var rightSample = ToInt16(right);
+                var leftSample = ToInt16(HapticOutputSafety.SoftLimit(left));
+                var rightSample = ToInt16(HapticOutputSafety.SoftLimit(right));
                 var target = offset + frame * bytesPerFrame;
 
                 _renderedFrames++;
@@ -514,17 +432,20 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             var diagnostic = new AudioRenderDiagnostic(
                 _renderedFrames,
                 _nonZeroRenderedFrames,
+                _limitedFrames,
                 _renderPeak,
                 _output?.PlaybackState.ToString() ?? "Stopped");
             _renderedFrames = 0;
             _nonZeroRenderedFrames = 0;
+            _limitedFrames = 0;
             _renderPeak = 0;
             return diagnostic;
         }
     }
 
-    private void MixGeneratedVoices(ref double left, ref double right)
+    private bool MixGeneratedVoices(ref double left, ref double right)
     {
+        var active = false;
         for (var index = _voices.Count - 1; index >= 0; index--)
         {
             var voice = _voices[index];
@@ -536,8 +457,11 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
             var low = Math.Sin(voice.LowPhase) * voice.LowAmplitude;
             var high = Math.Sin(voice.HighPhase) * voice.HighAmplitude;
-            left += (low + high * 0.62) * envelope * 0.64;
-            right += (low * 0.88 + high * 0.78) * envelope * 0.64;
+            var addLeft = (low + high * 0.62) * envelope * 0.64;
+            var addRight = (low * 0.88 + high * 0.78) * envelope * 0.64;
+            left += addLeft;
+            right += addRight;
+            active |= Math.Abs(addLeft) > 0.0001 || Math.Abs(addRight) > 0.0001;
 
             voice.RemainingSamples--;
             if (voice.RemainingSamples <= 0)
@@ -545,10 +469,12 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             else
                 _voices[index] = voice;
         }
+        return active;
     }
 
-    private void MixOriginalSamples(ref double left, ref double right)
+    private bool MixOriginalSamples(ref double left, ref double right)
     {
+        var active = false;
         for (var index = _sampleVoices.Count - 1; index >= 0; index--)
         {
             var voice = _sampleVoices[index];
@@ -588,11 +514,15 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
                 ? sourceLeft
                 : Interpolate(sample, frame0, frame1, 1, fraction);
 
-            left += sourceLeft * voice.Gain;
-            right += sourceRight * voice.Gain;
+            var addLeft = sourceLeft * voice.Gain;
+            var addRight = sourceRight * voice.Gain;
+            left += addLeft;
+            right += addRight;
+            active |= Math.Abs(addLeft) > 0.0001 || Math.Abs(addRight) > 0.0001;
             voice.Position += sample.PlaybackRate;
             _sampleVoices[index] = voice;
         }
+        return active;
     }
 
     private static float Interpolate(
@@ -746,6 +676,7 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
     public readonly record struct AudioRenderDiagnostic(
         long Frames,
         long NonZeroFrames,
+        long LimitedFrames,
         float Peak,
         string PlaybackState);
 

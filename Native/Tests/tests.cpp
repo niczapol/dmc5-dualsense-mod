@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <string_view>
 
@@ -143,6 +144,40 @@ int main() {
               read_i32(payload, kSteamRightCommandOffset) == 2 &&
               payload[data] == 4 && payload[data + 1] == 8 && payload[data + 2] == 5,
               "Steam DualSense payload encodes an independent right weapon effect");
+    }
+    {
+        RumbleRuntime rumble;
+        const auto start = RumbleRuntime::TimePoint{} + std::chrono::seconds(1);
+        rumble.set_game_motor(0, 1.0F, start);
+        rumble.set_game_motor(1, 0.5F, start);
+        const auto active = rumble.output(start + std::chrono::milliseconds(100));
+        rumble.set_game_motor(0, 0.0F, start + std::chrono::milliseconds(150));
+        const auto expired = rumble.output(start + std::chrono::milliseconds(200));
+        check(active.low == 255 && active.high >= 127 &&
+              expired.low == 0 && expired.high == 0,
+              "Independent rumble watchdogs cannot extend a stale opposite motor");
+    }
+    {
+        RumbleRuntime rumble;
+        const auto start = RumbleRuntime::TimePoint{} + std::chrono::seconds(1);
+        rumble.set_game_motor(130, 1.0F, start);
+        const auto output = rumble.output(start + std::chrono::milliseconds(10));
+        check(output.low >= 139 && output.low <= 141 && output.high == 0,
+              "Trigger-motor aliases are isolated and attenuated");
+    }
+    {
+        const double quiet = soft_limit_haptic(.5);
+        const double hot = soft_limit_haptic(2.51);
+        const double negative = soft_limit_haptic(-2.51);
+        check(std::abs(quiet - .5) < 0.000001 && hot > .99 && hot < 1.0 &&
+              std::abs(hot + negative) < 0.000001,
+              "Advanced-haptics limiter is transparent below the knee and bounded above it");
+    }
+    {
+        const RumbleOutput ordinary{180, 90};
+        check(arbitrate_rumble(ordinary, false) == ordinary &&
+              arbitrate_rumble(ordinary, true) == RumbleOutput{},
+              "Advanced haptics take exclusive actuator priority over ordinary rumble");
     }
 
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

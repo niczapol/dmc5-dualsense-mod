@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -7,14 +9,10 @@
 
 namespace dmc5ds {
 
-struct RumbleOutput {
-    std::uint8_t low{};
-    std::uint8_t high{};
-};
-
 struct AudioRenderDiagnostic {
     std::uint64_t frames{};
     std::uint64_t non_zero_frames{};
+    std::uint64_t limited_frames{};
     float peak{};
     std::string state;
 };
@@ -36,6 +34,7 @@ public:
     void stop_original();
     void pulse(float low, float high, float duration_seconds,
                float low_frequency = 72.0F, float high_frequency = 162.0F);
+    void rumble_pulse(float low, float high, float duration_seconds);
     void impact(float amount = 1.0F);
     void from_game_pad_shake(int motor, float power, float duration_seconds);
     void weapon_hit(const std::string& character, float amount = 1.0F);

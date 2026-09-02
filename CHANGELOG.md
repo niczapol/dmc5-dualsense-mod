@@ -3,6 +3,21 @@
 Only public version milestones are listed here. Internal calibration builds,
 discarded test packages, and one-off diagnostics are intentionally omitted.
 
+## 1.7.3 — Vibration-path hardening
+
+- Separated DMC5's ordinary rumble from the four-channel advanced-haptics
+  stream. Ordinary motor commands now have exactly one output owner: Steam
+  Input.
+- Added independent 180 ms watchdogs for all four RE Engine motor identifiers,
+  preventing traffic for one actuator from extending a stale value on another.
+- Added output arbitration: a non-silent advanced-haptics frame temporarily
+  takes actuator priority instead of being driven concurrently with traditional
+  rumble.
+- Replaced hard int16 clipping with a bounded soft limiter that preserves the
+  waveform below a 0.90 knee and safely contains overlapping PS5 samples.
+- Added matching native and managed regression coverage for motor expiry,
+  actuator aliases, output arbitration, audio-bus separation, and peak safety.
+
 ## 1.7.2-r1 — Scanner-friendly packaging revision
 
 - Flattened the pinned REFramework and C# API dependency payloads in both

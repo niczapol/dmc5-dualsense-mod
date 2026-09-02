@@ -147,16 +147,8 @@ struct HapticEngine::Impl {
     std::vector<Voice> voices;
     std::vector<SampleVoice> sample_voices;
 
-    float continuous_low{};
-    float continuous_high{};
-    double continuous_low_phase{};
-    double continuous_high_phase{};
-    Clock::time_point continuous_until{};
-    Clock::time_point last_motor_signal{};
-    float transient_low{};
-    float transient_high{};
-    Clock::time_point transient_start{};
-    Clock::time_point transient_until{};
+    RumbleRuntime rumble;
+    Clock::time_point advanced_haptics_until{};
 
     IMMDevice* device{};
     IAudioClient* audio_client{};
@@ -173,9 +165,11 @@ struct HapticEngine::Impl {
     bool volume_managed{};
     std::uint64_t rendered_frames{};
     std::uint64_t non_zero_frames{};
+    std::uint64_t limited_frames{};
     float render_peak{};
 
-    explicit Impl(float value) : strength(std::clamp(value, 0.0F, 1.0F)) {}
+    explicit Impl(float value)
+        : strength(std::clamp(value, 0.0F, 1.0F)), rumble(strength) {}
 
     ~Impl() { stop_audio(); }
 
@@ -431,19 +425,12 @@ struct HapticEngine::Impl {
     void render(std::int16_t* output, UINT32 frames) {
         std::scoped_lock lock(gate);
         const auto now = Clock::now();
-        const bool motor_active = now < continuous_until;
-        const float active_low = (motor_active ? continuous_low : 0.0F) * strength;
-        const float active_high = (motor_active ? continuous_high : 0.0F) * strength;
+        const auto priority_until = now + std::chrono::duration_cast<Clock::duration>(
+            std::chrono::duration<double>(static_cast<double>(frames) / kSampleRate)) +
+            std::chrono::milliseconds(50);
         for (UINT32 frame = 0; frame < frames; ++frame) {
             double left{}, right{};
-            if (active_low > .0001F || active_high > .0001F) {
-                continuous_low_phase += 2.0 * std::numbers::pi * 72.0 / kSampleRate;
-                continuous_high_phase += 2.0 * std::numbers::pi * 162.0 / kSampleRate;
-                const double low = std::sin(continuous_low_phase) * active_low;
-                const double high = std::sin(continuous_high_phase) * active_high;
-                left += (low + high * .56) * .64;
-                right += (low * .86 + high * .82) * .64;
-            }
+            bool advanced_frame{};
 
             for (std::size_t index = voices.size(); index-- > 0;) {
                 auto& voice = voices[index];
@@ -453,8 +440,12 @@ struct HapticEngine::Impl {
                 voice.high_phase += 2.0 * std::numbers::pi * voice.high_frequency / kSampleRate;
                 const double low = std::sin(voice.low_phase) * voice.low_amplitude;
                 const double high = std::sin(voice.high_phase) * voice.high_amplitude;
-                left += (low + high * .62) * envelope * .64;
-                right += (low * .88 + high * .78) * envelope * .64;
+                const double add_left = (low + high * .62) * envelope * .64;
+                const double add_right = (low * .88 + high * .78) * envelope * .64;
+                left += add_left;
+                right += add_right;
+                advanced_frame = advanced_frame || std::abs(add_left) > .0001 ||
+                                 std::abs(add_right) > .0001;
                 if (--voice.remaining <= 0) voices.erase(voices.begin() + index);
             }
 
@@ -484,13 +475,20 @@ struct HapticEngine::Impl {
                 };
                 const double source_left = interpolate(0);
                 const double source_right = sample.channels == 1 ? source_left : interpolate(1);
-                left += source_left * voice.gain;
-                right += source_right * voice.gain;
+                const double add_left = source_left * voice.gain;
+                const double add_right = source_right * voice.gain;
+                left += add_left;
+                right += add_right;
+                advanced_frame = advanced_frame || std::abs(add_left) > .0001 ||
+                                 std::abs(add_right) > .0001;
                 voice.position += sample.playback_rate;
             }
 
-            const auto left_sample = to_int16(left);
-            const auto right_sample = to_int16(right);
+            if (advanced_frame)
+                advanced_haptics_until = priority_until;
+            if (std::abs(left) > .90 || std::abs(right) > .90) ++limited_frames;
+            const auto left_sample = to_int16(soft_limit_haptic(left));
+            const auto right_sample = to_int16(soft_limit_haptic(right));
             output[frame * 4 + 0] = 0;
             output[frame * 4 + 1] = 0;
             output[frame * 4 + 2] = left_sample;
@@ -586,12 +584,6 @@ void HapticEngine::pulse(float low, float high, float duration, float low_freque
     high = std::clamp(high, 0.0F, 1.0F);
     duration = std::clamp(duration <= 0 ? .08F : duration, .025F, 1.5F);
     std::scoped_lock lock(impl_->gate);
-    const auto now = Clock::now();
-    impl_->transient_low = std::max(impl_->transient_low, low * impl_->strength);
-    impl_->transient_high = std::max(impl_->transient_high, high * impl_->strength);
-    impl_->transient_start = now;
-    impl_->transient_until = now + std::chrono::duration_cast<Clock::duration>(
-        std::chrono::duration<float>(duration));
     const int samples = static_cast<int>(kSampleRate * duration);
     impl_->voices.push_back({samples, samples, low * impl_->strength,
         high * impl_->strength, 0, 0, std::clamp(low_frequency, 30.0F, 220.0F),
@@ -600,45 +592,30 @@ void HapticEngine::pulse(float low, float high, float duration, float low_freque
         impl_->voices.erase(impl_->voices.begin(), impl_->voices.end() - 24);
 }
 
+void HapticEngine::rumble_pulse(float low, float high, float duration) {
+    std::scoped_lock lock(impl_->gate);
+    impl_->rumble.pulse(low, high, duration);
+}
+
 void HapticEngine::impact(float amount) {
     amount = std::clamp(amount, 0.0F, 1.0F);
     pulse(amount, amount * .72F, .12F);
 }
 
 void HapticEngine::from_game_pad_shake(int motor, float power, float duration) {
-    {
-        std::scoped_lock lock(impl_->gate);
-        if (Clock::now() - impl_->last_motor_signal < std::chrono::milliseconds(120)) return;
-    }
+    std::scoped_lock lock(impl_->gate);
+    if (impl_->rumble.has_recent_game_motor(std::chrono::milliseconds(120))) return;
     power = std::clamp(power, 0.0F, 1.0F);
-    if (motor == 1) pulse(power, power, duration);
-    else if (motor == 2) pulse(power, 0, duration);
-    else if (motor == 3) pulse(0, power, duration);
+    if (motor == 1) impl_->rumble.pulse(power, power, duration);
+    else if (motor == 2) impl_->rumble.pulse(power, 0, duration);
+    else if (motor == 3) impl_->rumble.pulse(0, power, duration);
 }
 
 RumbleOutput HapticEngine::rumble_output() {
     std::scoped_lock lock(impl_->gate);
     const auto now = Clock::now();
-    float low{}, high{};
-    if (now < impl_->transient_until) {
-        const auto total = std::max(.001,
-            std::chrono::duration<double>(impl_->transient_until - impl_->transient_start).count());
-        const auto remaining = std::clamp(
-            std::chrono::duration<double>(impl_->transient_until - now).count() / total, 0.0, 1.0);
-        const float envelope = static_cast<float>(std::sqrt(remaining));
-        low = impl_->transient_low * envelope;
-        high = impl_->transient_high * envelope;
-    } else {
-        impl_->transient_low = impl_->transient_high = 0;
-    }
-    if (now < impl_->continuous_until) {
-        low = std::max(low, impl_->continuous_low * impl_->strength);
-        high = std::max(high, impl_->continuous_high * impl_->strength);
-    }
-    return {
-        static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::nearbyint(low * 255)), 0, 255)),
-        static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::nearbyint(high * 255)), 0, 255))
-    };
+    return arbitrate_rumble(impl_->rumble.output(now),
+                            now < impl_->advanced_haptics_until);
 }
 
 void HapticEngine::weapon_hit(const std::string& character, float amount) {
@@ -652,22 +629,16 @@ void HapticEngine::weapon_hit(const std::string& character, float amount) {
 }
 
 void HapticEngine::set_game_motor(int motor, float power) {
-    power = std::clamp(power, 0.0F, 1.0F);
     std::scoped_lock lock(impl_->gate);
-    if (motor == 0 || motor == 128) impl_->continuous_low = power;
-    else if (motor == 1 || motor == 129) impl_->continuous_high = power;
-    else if (motor == 2 || motor == 130) impl_->continuous_low = power * .55F;
-    else if (motor == 3 || motor == 131) impl_->continuous_high = power * .55F;
-    else return;
-    impl_->last_motor_signal = Clock::now();
-    impl_->continuous_until = impl_->last_motor_signal + std::chrono::milliseconds(180);
+    impl_->rumble.set_game_motor(motor, power);
 }
 
 AudioRenderDiagnostic HapticEngine::take_render_diagnostic() {
     std::scoped_lock lock(impl_->gate);
     AudioRenderDiagnostic result{impl_->rendered_frames, impl_->non_zero_frames,
-        impl_->render_peak, impl_->is_started.load() ? "Playing" : "Stopped"};
-    impl_->rendered_frames = impl_->non_zero_frames = 0;
+        impl_->limited_frames, impl_->render_peak,
+        impl_->is_started.load() ? "Playing" : "Stopped"};
+    impl_->rendered_frames = impl_->non_zero_frames = impl_->limited_frames = 0;
     impl_->render_peak = 0;
     return result;
 }

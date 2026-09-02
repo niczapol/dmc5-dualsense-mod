@@ -263,9 +263,9 @@ void receive_loop(SOCKET socket, SharedState& shared, HapticEngine& haptics,
                     log("Character detected: " + next.character + ".");
                 }
             } else if (type == "rumble") {
-                haptics.pulse(message_value(message, "left", 0.0F),
-                              message_value(message, "right", 0.0F),
-                              message_value(message, "duration", 0.1F));
+                haptics.rumble_pulse(message_value(message, "left", 0.0F),
+                                     message_value(message, "right", 0.0F),
+                                     message_value(message, "duration", 0.1F));
             } else if (type == "padshake") {
                 haptics.from_game_pad_shake(message_value(message, "motor", 0),
                     std::clamp(message_value(message, "value", 0.0F), 0.0F, 1.0F),
@@ -548,7 +548,8 @@ int run() {
                 std::to_string(motor_count) + ", weaponHits=" +
                 std::to_string(weapon_hit_count) + ", audio=" +
                 std::to_string(audio.non_zero_frames) + '/' +
-                std::to_string(audio.frames) + ", peak=" +
+                std::to_string(audio.frames) + ", limited=" +
+                std::to_string(audio.limited_frames) + ", peak=" +
                 std::to_string(audio.peak) + '.');
         }
         Sleep(33);

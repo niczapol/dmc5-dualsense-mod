@@ -60,6 +60,58 @@ struct ControllerOutput {
     std::uint8_t right_rumble{};
 };
 
+struct RumbleOutput {
+    std::uint8_t low{};
+    std::uint8_t high{};
+
+    bool operator==(const RumbleOutput&) const = default;
+};
+
+class RumbleRuntime {
+public:
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = Clock::time_point;
+
+    explicit RumbleRuntime(float strength = 1.0F);
+
+    void set_game_motor(int motor, float power,
+                        TimePoint now = Clock::now());
+    void pulse(float low, float high, float duration_seconds,
+               TimePoint now = Clock::now());
+    bool has_recent_game_motor(
+        std::chrono::milliseconds age,
+        TimePoint now = Clock::now()) const;
+    RumbleOutput output(TimePoint now = Clock::now());
+
+private:
+    struct TimedMotor {
+        float power{};
+        TimePoint until{};
+    };
+
+    struct TransientMotor {
+        float power{};
+        TimePoint start{};
+        TimePoint until{};
+    };
+
+    static int normalize_motor(int motor);
+    static float transient_value(TransientMotor& motor, TimePoint now);
+
+    float strength_{};
+    std::array<TimedMotor, 4> motors_{};
+    TransientMotor transient_low_{};
+    TransientMotor transient_high_{};
+    TimePoint last_motor_signal_{};
+};
+
+// Advanced haptics are mixed in floating point. This limiter leaves ordinary
+// signal levels untouched and smoothly contains overlapping event peaks before
+// conversion to the controller's 16-bit actuator stream.
+double soft_limit_haptic(double value);
+
+RumbleOutput arbitrate_rumble(RumbleOutput ordinary, bool advanced_haptics_active);
+
 struct BridgeConfig {
     int port{27105};
     std::string adaptive_profile{"Authentic"};

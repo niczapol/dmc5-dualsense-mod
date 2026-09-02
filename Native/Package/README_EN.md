@@ -4,8 +4,14 @@ This is the recommended build of the Devil May Cry 5 Steam mod. It provides
 the complete feature set: binding-aware adaptive triggers, advanced haptics,
 character LED colors, and the DualSense interface artwork.
 
-Version 1.7.2 reads Nero's current character-specific DMC5 control table, so
+Starting with version 1.7.2, the mod reads Nero's current character-specific DMC5 control table, so
 Blue Rose resistance follows `AttackL` when the action is reassigned to R2.
+
+Version 1.7.3 gives ordinary DMC5 rumble and advanced haptics separate output
+owners. Ordinary rumble uses only Steam Input, while advanced effects use only
+the four-channel DualSense audio endpoint. Independent per-motor watchdogs,
+short output arbitration and a soft audio limiter prevent stale vibration,
+double-driving and hard clipping when several effects overlap.
 
 ## Requirements
 

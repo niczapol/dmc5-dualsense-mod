@@ -17,11 +17,23 @@ function Get-PinnedFile(
     [string]$Url,
     [string]$Destination,
     [long]$Size,
-    [string]$Sha256
+    [string]$Sha256,
+    [switch]$CanonicalLf
 ) {
+    function Test-PinnedContent([string]$Path) {
+        if ($CanonicalLf) {
+            # Git checkouts may convert CRLF; compare the exact canonical text,
+            # not a machine-specific line ending representation.
+            $bytes = [Text.Encoding]::UTF8.GetBytes(([IO.File]::ReadAllText($Path)).Replace("`r`n", "`n"))
+            $hasher = [Security.Cryptography.SHA256]::Create()
+            try { $hash = [BitConverter]::ToString($hasher.ComputeHash($bytes)).Replace('-', '') }
+            finally { $hasher.Dispose() }
+            return $bytes.Length -eq $Size -and $hash -eq $Sha256
+        }
+        return (Get-Item -LiteralPath $Path).Length -eq $Size -and (Get-Hash $Path) -eq $Sha256
+    }
     if (Test-Path -LiteralPath $Destination -PathType Leaf) {
-        if ((Get-Item -LiteralPath $Destination).Length -ne $Size -or
-            (Get-Hash $Destination) -ne $Sha256) {
+        if (-not (Test-PinnedContent $Destination)) {
             throw "Existing pinned input has the wrong size or hash: $Destination"
         }
         return
@@ -32,8 +44,7 @@ function Get-PinnedFile(
     $temporary = $Destination + '.download'
     try {
         Invoke-WebRequest -Uri $Url -OutFile $temporary
-        if ((Get-Item -LiteralPath $temporary).Length -ne $Size -or
-            (Get-Hash $temporary) -ne $Sha256) {
+        if (-not (Test-PinnedContent $temporary)) {
             throw "Downloaded pinned input failed validation: $Url"
         }
         Move-Item -LiteralPath $temporary -Destination $Destination
@@ -82,13 +93,13 @@ $refRoot = Join-Path $tools 'vendor\REFramework'
 foreach ($file in @(
     @{
         Relative = 'include\reframework\API.h'
-        Size = 20647
-        Hash = 'F63A424EE8AE162D1086B3BAAB5FA5A78A8A9AA25F0C82644E5775E523100394'
+        Size = 20200
+        Hash = '6417FEDDBA2728E06BB04DF94B20281713FD5AA328AFA2BCB718A8B6DD357281'
     },
     @{
         Relative = 'include\reframework\API.hpp'
-        Size = 36599
-        Hash = '9337557AEE8FB77A0D49BA7D7D2B23BB355899742DDDB41701B6931E12043244'
+        Size = 35509
+        Hash = '6F8A85A2A440C0D3C29D0829A52F85608F07478E8742804C7476DDC266BD6FE8'
     }
 )) {
     $urlPath = ([string]$file.Relative).Replace('\', '/')
@@ -96,7 +107,7 @@ foreach ($file in @(
         ("https://raw.githubusercontent.com/praydog/REFramework/$refCommit/$urlPath") `
         (Join-Path $refRoot ([string]$file.Relative)) `
         ([long]$file.Size) `
-        ([string]$file.Hash)
+        ([string]$file.Hash) -CanonicalLf
 }
 
 [pscustomobject]@{

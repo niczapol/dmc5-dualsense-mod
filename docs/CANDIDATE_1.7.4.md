@@ -120,6 +120,26 @@ publish the candidate as hardware-verified until the user confirms these tests.
 
 ## Rejected reconnect experiment — internal history only
 
+### rc2 verification
+
+Runtime/package source commit: `962693bf2d8db6f90fe94a2a74dfc6bd0376d47f`.
+Both local ZIPs passed clean installation/uninstallation, eight adversarial
+installer cases each and all eight combined runtime checks. Existing logic
+tests passed. The first rc2 CI run (33944937635) also reported every runtime
+assertion as passing, but its caller treated an unset `$LASTEXITCODE` as failure.
+The audit scripts now explicitly return zero on success instead of depending
+on a preceding compiler invocation to initialize the caller's exit-code state.
+This is a test-harness correction, not a change to runtime behavior or assertions.
+
+Local native ZIP: 16,204,969 bytes, SHA-256
+`A8DD3D9B853BD7423D8EEF0E204B0BA358A14598286B045ACA357BD865FA443A`.
+Local fallback ZIP: 97,984,089 bytes, SHA-256
+`936203D96FBDEAC1F5EA34089AD992B7B99B8119F00851985315AF33405FC0E4`.
+The user's real installation is still the tested rc1; rc2 was built/tested in
+isolated folders, not installed over their working game during this cleanup.
+
+### Experiment outcome
+
 Implementation at `24e00b8` / `753120d`: enumerate Steam OUTPUT handles on each
 write, retain a still-present handle or select a replacement, reopen a failed
 WASAPI stream and discard queued voices. A fake Steam API proved replacement

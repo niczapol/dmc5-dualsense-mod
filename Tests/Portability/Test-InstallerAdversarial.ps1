@@ -123,3 +123,4 @@ $report | ConvertTo-Json -Depth 8
 
 # Findings intentionally make the audit red until their corresponding fixes exist.
 if (@($results | Where-Object { -not $_.Pass }).Count -gt 0) { exit 1 }
+exit 0

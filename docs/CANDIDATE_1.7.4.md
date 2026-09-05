@@ -1,6 +1,8 @@
-# 1.7.4-rc1 acceptance and laptop handoff
+# 1.7.4 acceptance and laptop handoff (engineering notes)
 
-This is a test candidate, not a replacement of the public 1.7.3 release yet.
+Current GitHub revision: 1.7.4-rc2. The user confirmed normal USB gameplay on
+rc1, with USB reconnect still failing. This is a working USB-session build,
+not a claim of complete hardware coverage or a Nexus replacement.
 Source branch: `fix/1.7.4-portability`. No Nexus upload is authorized by this
 candidate workflow.
 
@@ -18,9 +20,8 @@ were made to the accepted trigger profiles, button-remapping source or UI media.
 Both Bridges receive the same saved-per-character bindings through the native
 plugin, including the configured UDP port.
 
-Steam OUTPUT handles are re-enumerated, audio failures can reopen the endpoint,
-and stale sample queues are discarded. These are necessary output recovery
-changes, NOT proof that Steam restores gameplay INPUT after unplug/replug.
+Steam output handle caching and the audio stream lifecycle are restored to the
+1.7.3 baseline in rc2. The strict four-channel endpoint check is retained.
 One USB DualSense is the supported acceptance target; multiple-controller
 routing, Bluetooth and Edge remain unverified. Restart the game after USB
 reconnection if gameplay input is absent. Do not add an input workaround
@@ -45,7 +46,7 @@ files outside the chosen directory.
 
 ## Automated acceptance
 
-Run the existing logic suites and `Tools/Test-CleanInstall.ps1` plus all three
+Run the existing logic suites and `Tools/Test-CleanInstall.ps1` plus both
 `Tests/Portability/*.ps1` audit entrypoints against the new ZIPs. In this
 candidate their assertions should be green, not waived. Also test an upgrade
 from each 1.7.3 variant and both directions of package switching.
@@ -56,7 +57,7 @@ both full packages, runs the Windows tests and retains candidate ZIP artifacts.
 These Windows runner checks can be repeated while working on a MacBook.
 They do not simulate physical adaptive-trigger force or actual Steam gameplay.
 
-### Recorded results (2026-09-05)
+### Historical rc1 results (2026-09-05)
 
 - Code and build-input verification commit: `753120d8fa0c324563251643c51506e91f31b1a5`.
 - [Windows CI run 33943760124](https://github.com/niczapol/dmc5-dualsense-mod/actions/runs/33943760124):
@@ -88,15 +89,20 @@ After artifact expiration, rerun CI on this branch: its pinned media and
 compiler download do not need the developer PC. Windows jobs run remotely;
 macOS alone cannot run the game or validate hardware effects.
 
-The public stable release and Nexus files remain 1.7.3. Do not merge/publish
-this candidate as accepted until the hardware checklist below is confirmed.
+The public stable release and Nexus files remain 1.7.3. Keep this working
+revision on GitHub for later distribution; do not update Nexus in this task.
 For local rollback, a pre-update backup is stored on the Windows development
 PC under `C:/ds/.work/backup-before-1.7.4-rc1-20260905`. It contains mod state,
 logs/configuration and owned loose files, not the multi-gigabyte game PAK.
 Use the candidate's uninstaller followed by the stable 1.7.3 installer for
 normal rollback; do not blindly overlay old manifests or PAK hash records.
 
-## Human checks before stable publication
+## Hardware acceptance record and future checks
+
+The user reports that everything in the tested rc1 session works except USB
+reconnection. Do not infer that a second physical controller, Bluetooth,
+fallback gameplay or a clean second PC was tested. rc2 removes the experiment;
+its rebuilt packages need fresh automated checks, not relabelled rc1 results.
 
 1. Cold launch through Steam with one USB DualSense already connected.
 2. Nero: default L2 Exceed and shooting explicitly remapped to R2; verify both.
@@ -111,3 +117,21 @@ normal rollback; do not blindly overlay old manifests or PAK hash records.
 Try the fallback separately if time permits. A no-developer-tools Windows PC
 or VM remains useful for a final independent prerequisite check. Do not
 publish the candidate as hardware-verified until the user confirms these tests.
+
+## Rejected reconnect experiment — internal history only
+
+Implementation at `24e00b8` / `753120d`: enumerate Steam OUTPUT handles on each
+write, retain a still-present handle or select a replacement, reopen a failed
+WASAPI stream and discard queued voices. A fake Steam API proved replacement
+of handle 101 by 202, but did not exercise Steam's actual gameplay INPUT path.
+The user's USB disconnect/reconnect test still lost control in the game.
+Therefore the mock passing was not end-to-end hotplug acceptance and must not
+be used to justify this approach again without reproducing the input failure.
+
+At the user's request, rc2 removes those changes from both Bridges and removes
+the experiment-only fake API and lifecycle test from active CI. Historical
+source/tests remain recoverable from the commits above; do not rewrite shared
+Git history or erase diagnostic evidence. Public changelog describes retained
+fixes only. No new per-frame reconnect logging or input workaround is added.
+Further work, if authorized, must distinguish physical input, Steam/game input,
+Steam output and WASAPI audio instead of treating them as one connection.

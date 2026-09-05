@@ -93,11 +93,9 @@ jobs:
             ./Tests/Portability/Test-InstallerAdversarial.ps1 -PackageZip $zip
             if ($LASTEXITCODE -ne 0) { throw "Installer regression: $variant" }
           }
-      - name: Controller handle and released runtime isolation tests
+      - name: Released runtime isolation tests
         shell: pwsh
         run: |
-          ./Tests/Portability/Test-SteamHandleLifecycle.ps1 -Compiler .tools/native/llvm-mingw/bin/clang++.exe
-          if ($LASTEXITCODE -ne 0) { throw 'Controller lifecycle regression' }
           $version = (Get-Content version.json -Raw | ConvertFrom-Json).Version
           ./Tests/Portability/Test-RuntimeIsolation.ps1 -NativePackageDirectory "artifacts/native/DMC5DualSense-Native-$version" -ManagedPackageDirectory "artifacts/managed/DMC5DualSense-Managed-$version"
           if ($LASTEXITCODE -ne 0) { throw 'Runtime isolation regression' }

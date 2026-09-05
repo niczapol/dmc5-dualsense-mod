@@ -126,7 +126,8 @@ internal sealed class SteamInputOutputDevice : IControllerOutputDevice
 
     private bool EnsureConnectedNoLock()
     {
-        if (_controllerHandle == 0 && DateTime.UtcNow < _nextReconnectUtc) return false;
+        if (_controllerHandle != 0) return true;
+        if (DateTime.UtcNow < _nextReconnectUtc) return false;
         _nextReconnectUtc = DateTime.UtcNow.AddSeconds(1);
 
         try
@@ -149,7 +150,6 @@ internal sealed class SteamInputOutputDevice : IControllerOutputDevice
                 pinned.Free();
             }
 
-            if (_controllerHandle != 0 && handles.Take(count).Contains(_controllerHandle)) return true;
             _controllerHandle = handles.Take(count)
                 .FirstOrDefault(handle => handle != 0 &&
                     _getInputTypeForHandle!(_steamInput, handle) == Ps5ControllerType);

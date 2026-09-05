@@ -1,8 +1,9 @@
 # DMC5 DualSense
 
-Development candidate: **1.7.4-rc1**, see [acceptance notes](docs/CANDIDATE_1.7.4.md).
-It is not a stable release yet. Use one USB DualSense for testing; Bluetooth,
-multiple-controller routing and real gameplay-input hotplug are not verified.
+GitHub build: **1.7.4-rc2** — installation and portability improvements.
+Normal USB gameplay was user-confirmed on the preceding candidate; this revision
+retains those fixes. See the [changelog](CHANGELOG.md) for details. Public stable
+downloads below and Nexus remain on 1.7.3 until distribution is updated.
 
 [English](README.md) | [Русский](README_RU.md)
 
@@ -43,6 +44,9 @@ safe replacement while preserving user configuration and logs.
 - a legitimate Steam copy of Devil May Cry 5;
 - a DualSense connected over USB;
 - Steam Input enabled or left at the game's default setting.
+
+Connect the controller before launching the game. Restart the game after
+disconnecting and reconnecting USB. Multiple-controller routing is unverified.
 
 USB is the only fully supported and physically verified connection. Bluetooth
 is experimental: Steam Input should continue to provide buttons, sticks,

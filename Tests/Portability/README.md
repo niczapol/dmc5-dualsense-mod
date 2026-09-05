@@ -4,7 +4,7 @@ These are diagnostic regression tests added during the 2026-09-05 audit of
 release 1.7.3. Some assertions intentionally FAIL on that release. A passing
 normal-build test suite does not supersede these findings.
 
-The 1.7.4-rc1 candidate passes these regressions for both packages. See
+The 1.7.4-rc1 candidate passed the installer and runtime regressions for both packages. See
 `docs/CANDIDATE_1.7.4.md` for the tested commit, CI run and hardware limits.
 
 Run on Windows x64 with PowerShell 7. No game or real controller is required.
@@ -23,12 +23,10 @@ From the repository root, replacing sample paths with real download locations:
 pwsh -File Tests/Portability/Test-InstallerAdversarial.ps1 -PackageZip C:/Downloads/DMC5DualSense-Native-1.7.3-win-x64.zip
 pwsh -File Tests/Portability/Test-InstallerAdversarial.ps1 -PackageZip C:/Downloads/DMC5DualSense-Managed-1.7.3-win-x64.zip
 pwsh -File Tests/Portability/Test-RuntimeIsolation.ps1 -NativePackageDirectory C:/Downloads/native-extracted -ManagedPackageDirectory C:/Downloads/managed-extracted
-pwsh -File Tests/Portability/Test-SteamHandleLifecycle.ps1 -Compiler C:/tools/llvm-mingw/bin/clang++.exe
 ```
 
 The extracted package directory means the directory containing `Install.ps1`
-and `DMC5DualSense.Bridge.exe`, not its parent directory. The lifecycle test uses
-the same LLVM-MinGW toolchain as `Native/build-native.ps1`.
+and `DMC5DualSense.Bridge.exe`, not its parent directory.
 
 ## What is exercised
 
@@ -42,12 +40,6 @@ the same LLVM-MinGW toolchain as `Native/build-native.ps1`.
   fixtures. Native malformed-config execution is skipped only for historical
   1.7.3 packages, whose fallback defaults would enable audio; the candidate
   rejects invalid configuration and is tested on this path too.
-- Native platform code: a fake Steam API presents handle 101, disconnects it,
-  then presents handle 202. The test observes the actual destination of output
-  calls and counts controller enumerations.
-
-The fake `steam_api64.dll` is ONLY a test double. Never copy it into the game,
-installer payload, release assets, or any real Steam library.
 
 `test_framework_dependency.cpp` is a separate optional, historical 1.7.3
 hostfxr probe. The 1.7.4 candidate no longer ships this C++/CLI plugin. Compile
@@ -61,7 +53,7 @@ REFramework. It is not a substitute for a clean Windows VM test.
 
 ## Limits
 
-Mocks establish code behavior, not controller firmware behavior or whether
+Fixtures establish code behavior, not controller firmware behavior or whether
 Steam restores the game's input after a USB disconnect. These tests do not
 measure physical resistance, verify Bluetooth/Edge, render the game's UI, or
 cover every third-party loader. See `docs/AUDIT_2026-09-05.md` for findings and

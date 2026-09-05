@@ -1,4 +1,7 @@
-# DMC5 DualSense Layer 1.7.4-rc1 — Managed C# fallback
+# DMC5 DualSense Layer 1.7.4-rc2 — Managed C# fallback
+
+Connect the controller before launching the game. Restart the game after
+disconnecting and reconnecting USB.
 
 This is the compatibility fallback for PCs where the recommended native C++
 build does not start correctly. It implements the same controller behavior but

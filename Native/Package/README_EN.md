@@ -1,5 +1,8 @@
 # DMC5 DualSense Layer — Native C++
 
+Connect the controller before launching the game. Restart the game after
+disconnecting and reconnecting USB.
+
 This is the recommended build of the Devil May Cry 5 Steam mod. It provides
 the complete feature set: binding-aware adaptive triggers, advanced haptics,
 character LED colors, and the DualSense interface artwork.

@@ -6,6 +6,7 @@ param(
     [string]$UiDirectory,
     [string]$DependencyCache,
     [string]$DotnetPath,
+    [string]$ToolsRoot,
     [switch]$FrameworkDependent
 )
 
@@ -150,6 +151,7 @@ foreach ($asset in $assetManifest.Ui) {
 
 $dependencyFiles = [ordered]@{}
 foreach ($dependency in $assetManifest.Dependencies) {
+    if ($dependency.Name -eq 'csharp-api.zip') { continue }
     $target = Join-Path $dependencyRoot ([string]$dependency.Name)
     if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
         Write-Host "Downloading pinned dependency $($dependency.Name)..."
@@ -225,8 +227,16 @@ Copy-ExactFile (Join-Path $bridgePublish 'DMC5DualSense.Bridge.exe') `
     (Join-Path $stageRoot 'DMC5DualSense.Bridge.exe')
 Copy-ExactFile (Join-Path $launcherPublish 'DMC5DualSense.Launcher.exe') `
     (Join-Path $stageRoot 'DMC5DualSense.Launcher.exe')
-Copy-ExactFile (Join-Path $repoRoot 'Plugin\DMC5DualSense.cs') `
-    (Join-Path $stageRoot 'DMC5DualSense.cs')
+$nativeBuild = Join-Path $buildRoot 'native-plugin'
+& (Join-Path $repoRoot 'Native\build-native.ps1') -OutputDirectory $nativeBuild -ToolsRoot $ToolsRoot -SkipRuntimeAssets | Out-Host
+if ($LASTEXITCODE -ne 0) { throw 'Shared telemetry plugin build failed.' }
+Copy-ExactFile (Join-Path $nativeBuild 'DMC5DualSense.dll') (Join-Path $stageRoot 'DMC5DualSense.dll')
+foreach ($name in @('Install-Core.ps1','Install-Transactional.ps1')) {
+    Copy-ExactFile (Join-Path $repoRoot ('Package\' + $name)) (Join-Path $stageRoot $name)
+}
+foreach ($asset in $assetManifest.Haptics) {
+    Copy-ExactFile (Join-Path $hapticsRoot $asset.Name) (Join-Path $stageRoot ('Haptics\' + $asset.Name))
+}
 
 foreach ($asset in $assetManifest.Ui) {
     $relative = ([string]$asset.Path).Replace('/', [IO.Path]::DirectorySeparatorChar)
@@ -234,8 +244,6 @@ foreach ($asset in $assetManifest.Ui) {
 }
 Expand-ExactArchive ([string]$dependencyFiles['REFramework.zip']) `
     (Join-Path $stageRoot 'Dependencies\REFramework')
-Expand-ExactArchive ([string]$dependencyFiles['csharp-api.zip']) `
-    (Join-Path $stageRoot 'Dependencies\CSharpAPI')
 Assert-NoNestedArchives $stageRoot
 
 $sourceCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
@@ -247,6 +255,7 @@ $buildInfo = @(
     "Source date: $sourceDate",
     "Target: Devil May Cry 5 Steam / Windows x64",
     "Runtime: .NET $dotnetVersion, self-contained=$selfContained",
+    'Telemetry: shared native plugin API 1.10; no REFramework.NET dependency',
     "Controller: Sony DualSense USB VID_054C/PID_0CE6",
     "Input: Steam Input (native game path)",
     "Output: Steam Input DualSense API + WASAPI advanced haptics",

@@ -26,8 +26,13 @@ internal sealed class BridgeConfig
             return defaults;
         }
 
-        return JsonSerializer.Deserialize<BridgeConfig>(File.ReadAllText(path), JsonOptions)
-               ?? new BridgeConfig();
+        var config = JsonSerializer.Deserialize<BridgeConfig>(File.ReadAllText(path), JsonOptions)
+               ?? throw new InvalidDataException("Configuration must be a JSON object.");
+        static bool Valid(float value) => float.IsFinite(value) && value >= 0 && value <= 1;
+        if (config.Port < 1 || config.Port > 65535 || !Valid(config.TriggerStrength) ||
+            !Valid(config.HapticsStrength) || !Valid(config.LightbarStrength) || !Valid(config.HapticsEndpointVolume))
+            throw new InvalidDataException("Port must be 1..65535 and strengths must be 0..1.");
+        return config;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

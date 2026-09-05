@@ -137,6 +137,7 @@ AudioEndpointMatch classify_dualsense_audio_endpoint(
                                hardware.find(L"pid_0df2") != std::wstring::npos ||
                                hardware.find(L"pid_0e5f") != std::wstring::npos;
     const bool haptics_channels = channel_count >= 4;
+    if (!haptics_channels) return {0, "four haptic audio channels are required"};
 
     if (known_product && haptics_channels)
         return {1200, "hardware-id DualSense, 4-channel"};

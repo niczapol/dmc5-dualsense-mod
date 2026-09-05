@@ -165,15 +165,23 @@ struct SteamInputOutputDevice::Impl {
     }
 
     bool connect() {
-        if (controller_handle != 0) return true;
         const auto now = std::chrono::steady_clock::now();
-        if (now < next_retry) return false;
+        if (controller_handle == 0 && now < next_retry) return false;
         next_retry = now + std::chrono::seconds(1);
         if (!steam_api_initialized && !initialize_steam()) return false;
         run_frame(steam_input, true);
         std::array<std::uint64_t, 16> handles{};
         const int count = std::clamp(get_connected_controllers(steam_input, handles.data()),
                                      0, static_cast<int>(handles.size()));
+        // Revalidate cached handles; output API calls do not acknowledge hardware.
+        const auto previous = controller_handle;
+        controller_handle = 0;
+        for (int index = 0; index < count; ++index) {
+            if (handles[index] == previous && previous != 0) {
+                controller_handle = previous;
+                return true;
+            }
+        }
         for (int index = 0; index < count; ++index) {
             if (handles[index] != 0 && get_input_type(steam_input, handles[index]) ==
                                        kPs5ControllerType) {

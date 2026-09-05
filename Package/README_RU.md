@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.7.3 — запасная C#-версия
+# DMC5 DualSense Layer 1.7.4-rc1 — запасная C#-версия
 
 Это совместимый fallback-вариант на случай, если рекомендуемая Native C++
 версия не запускается на конкретном компьютере. Логика контроллера такая же,
@@ -161,8 +161,8 @@ powershell -ExecutionPolicy Bypass -File .\Install.ps1 -GameDir "D:\SteamLibrary
 точную резервную копию и продолжает установку, а `N` отменяет её без изменения
 существующей DLL. Заменённый файл точно восстанавливается при удалении мода.
 Резервная managed-версия требует
-REFramework Plugin API 1.15; режим замены нужен, если более старый фреймворк
-отклоняет `REFramework.NET.dll`.
+REFramework Plugin API 1.10; режим замены нужен, если более старый фреймворк
+отклоняет `DMC5DualSense.dll`.
 
 ## Проверка контроллера без игры
 
@@ -209,7 +209,7 @@ payload-данные PAK не затрагиваются.
 - `DMC5DualSense\bridge.log` — состояние Steam Input output и аудиовыхода;
 - `DMC5DualSense\launcher.log` — журнал только резервного ручного Launcher;
 - `DMC5DualSense\plugin.log` — игровые hooks, назначения и ошибки;
-- `re2_framework_log.txt` — загрузка REFramework и C#-плагина;
+- `re2_framework_log.txt` — загрузка REFramework и нативного плагина;
 - `calibration.csv`, `nero-input.csv`, `motor.csv` — калибровочные данные, если
   `EnableCalibrationLog` включён.
 

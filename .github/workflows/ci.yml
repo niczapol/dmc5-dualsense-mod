@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, "feat/**", "fix/**"]
   pull_request:
@@ -50,6 +51,10 @@ jobs:
             'Package/Uninstall.ps1',
             'Native/Package/Install.ps1',
             'Native/Package/Uninstall.ps1',
+            'Native/Package/Install-Core.ps1',
+            'Native/Package/Install-Transactional.ps1',
+            'Package/Install-Core.ps1',
+            'Package/Install-Transactional.ps1',
             'Tools/Build-Release.ps1',
             'Tools/Test-CleanInstall.ps1'
           )) {
@@ -60,3 +65,49 @@ jobs:
               throw "PowerShell parse failure: $path"
             }
           }
+
+  packaged-windows-tests:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.400
+      - name: Obtain pinned build inputs and compiler
+        shell: pwsh
+        run: |
+          ./Tools/Prepare-ReleaseInputs.ps1 -Destination inputs
+          ./Native/Prepare-Dependencies.ps1
+      - name: Build both complete candidate packages
+        shell: pwsh
+        run: |
+          ./Native/build-package.ps1 -OutputDirectory artifacts/native -BuildDirectory artifacts/native-build -UiDirectory inputs/payload/UI -HapticsDirectory inputs/payload/Haptics
+          ./Tools/Build-Release.ps1 -OutputDirectory artifacts/managed -UiDirectory inputs/payload/UI -HapticsDirectory inputs/payload/Haptics
+      - name: Install, uninstall and failure-path regression tests
+        shell: pwsh
+        run: |
+          foreach ($variant in @('native','managed')) {
+            $zip = (Get-ChildItem "artifacts/$variant/*.zip").FullName
+            ./Tools/Test-CleanInstall.ps1 -PackageZip $zip
+            ./Tests/Portability/Test-InstallerAdversarial.ps1 -PackageZip $zip
+            if ($LASTEXITCODE -ne 0) { throw "Installer regression: $variant" }
+          }
+      - name: Controller handle and released runtime isolation tests
+        shell: pwsh
+        run: |
+          ./Tests/Portability/Test-SteamHandleLifecycle.ps1 -Compiler .tools/native/llvm-mingw/bin/clang++.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Controller lifecycle regression' }
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).Version
+          ./Tests/Portability/Test-RuntimeIsolation.ps1 -NativePackageDirectory "artifacts/native/DMC5DualSense-Native-$version" -ManagedPackageDirectory "artifacts/managed/DMC5DualSense-Managed-$version"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime isolation regression' }
+      - name: Upload tested candidates (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-tested-candidates
+          retention-days: 90
+          path: |
+            artifacts/native/*.zip
+            artifacts/native/CHECKSUMS.txt
+            artifacts/managed/*.zip
+            artifacts/managed/CHECKSUMS.txt

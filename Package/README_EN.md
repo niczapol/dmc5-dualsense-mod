@@ -1,4 +1,4 @@
-# DMC5 DualSense Layer 1.7.3 — Managed C# fallback
+# DMC5 DualSense Layer 1.7.4-rc1 — Managed C# fallback
 
 This is the compatibility fallback for PCs where the recommended native C++
 build does not start correctly. It implements the same controller behavior but
@@ -66,8 +66,8 @@ is preserved, so its existing plugins remain available. If an unknown
 `dinput8.dll` is found, the installer asks whether to replace it. Choose `Y` to
 keep an exact backup and continue, or `N` to cancel without changing the
 existing DLL. A replaced file is restored exactly on uninstall. The managed fallback requires REFramework
-Plugin API 1.15; use replacement mode if an older existing framework rejects
-`REFramework.NET.dll`.
+Plugin API 1.10; use replacement mode if an older existing framework rejects
+`DMC5DualSense.dll`.
 
 REFramework loads the in-game plugin, which starts the hidden Bridge for the
 current DMC5 process. The Bridge exits with the game and creates no Windows

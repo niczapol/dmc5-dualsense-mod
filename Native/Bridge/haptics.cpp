@@ -404,16 +404,17 @@ struct HapticEngine::Impl {
     void render_loop() {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         HANDLE events[]{stop_event, audio_event};
-        while (WaitForMultipleObjects(2, events, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
+        while (WaitForMultipleObjects(2, events, FALSE, 1000) == WAIT_OBJECT_0 + 1) {
             UINT32 padding{};
-            if (FAILED(audio_client->GetCurrentPadding(&padding)) || padding >= buffer_frames)
-                continue;
+            if (FAILED(audio_client->GetCurrentPadding(&padding))) break;
+            if (padding >= buffer_frames) continue;
             const UINT32 frames = buffer_frames - padding;
             BYTE* data{};
-            if (FAILED(render_client->GetBuffer(frames, &data))) continue;
+            if (FAILED(render_client->GetBuffer(frames, &data))) break;
             render(reinterpret_cast<std::int16_t*>(data), frames);
             if (FAILED(render_client->ReleaseBuffer(frames, 0))) break;
         }
+        is_started.store(false, std::memory_order_release);
         CoUninitialize();
     }
 
@@ -523,7 +524,12 @@ HapticEngine::~HapticEngine() = default;
 bool HapticEngine::start(const std::string& fragment, bool ensure_audible, float volume,
                          const std::filesystem::path& sample_directory) {
     if (impl_->is_started.load(std::memory_order_acquire)) return true;
+    // Join/release a failed stream outside the render mutex before reopening.
+    impl_->stop_audio();
     std::scoped_lock lock(impl_->gate);
+    impl_->sample_voices.clear();
+    impl_->voices.clear();
+    impl_->advanced_haptics_until = {};
     if (!impl_->load_samples(sample_directory)) return false;
     if (!impl_->find_device(wide(fragment))) {
         impl_->status = "DualSense 4-channel audio endpoint not found";

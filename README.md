@@ -1,5 +1,9 @@
 # DMC5 DualSense
 
+Development candidate: **1.7.4-rc1**, see [acceptance notes](docs/CANDIDATE_1.7.4.md).
+It is not a stable release yet. Use one USB DualSense for testing; Bluetooth,
+multiple-controller routing and real gameplay-input hotplug are not verified.
+
 [English](README.md) | [Русский](README_RU.md)
 
 Full DualSense support for the Windows Steam version of Devil May Cry 5:
@@ -13,8 +17,11 @@ Start with the **[Recommended version — lightweight](https://github.com/niczap
 (C++ build). If it does not start correctly on your PC, use the
 **[Compatibility version — fallback](https://github.com/niczapol/dmc5-dualsense-mod/releases/download/v1.7.3/DMC5DualSense-Managed-1.7.3-win-x64.zip)**
 (C# build). Both provide the same controller behavior. The compatibility
-version is much larger because it includes its own .NET runtime; neither one
-requires additional software.
+version is much larger because its Bridge includes its own .NET runtime.
+The published **1.7.3 fallback** additionally needs .NET 10 x64 for its legacy
+in-game plugin. The **1.7.4 candidate** removes that dependency by using the
+same native telemetry plugin in both packages. The lightweight build does not
+need a separately installed runtime.
 
 Do not install both at once. Running either installer over the other performs a
 safe replacement while preserving user configuration and logs.

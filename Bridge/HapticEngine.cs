@@ -42,7 +42,7 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
 
     public WaveFormat WaveFormat { get; }
     public string Status => _status;
-    public bool Started => _output is not null;
+    public bool Started => _output?.PlaybackState == PlaybackState.Playing;
     public int OriginalSampleCount => _samples.Count;
 
     public IReadOnlyList<OriginalSampleDiagnostic> GetOriginalSampleDiagnostics() =>
@@ -67,7 +67,18 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
         bool ensureEndpointAudible,
         float endpointVolume)
     {
-        if (_output is not null) return true;
+        if (Started) return true;
+        _output?.Dispose();
+        _output = null;
+        RestoreEndpointVolume();
+        _audioDevice?.Dispose();
+        _audioDevice = null;
+        lock (_gate)
+        {
+            _voices.Clear();
+            _sampleVoices.Clear();
+            _advancedHapticsUntilUtc = default;
+        }
 
         try
         {
@@ -157,6 +168,7 @@ internal sealed class HapticEngine : IWaveProvider, IDisposable
             hardwareIdentity.Contains("PID_0DF2", StringComparison.OrdinalIgnoreCase) ||
             hardwareIdentity.Contains("PID_0E5F", StringComparison.OrdinalIgnoreCase);
         var hasHapticsChannels = channelCount >= ChannelCount;
+        if (!hasHapticsChannels) return new AudioEndpointMatch(0, "four haptic audio channels are required");
 
         if (hasKnownDualSenseProduct && hasHapticsChannels)
             return new AudioEndpointMatch(1200, "hardware-id DualSense, 4-channel");

@@ -167,7 +167,7 @@ $stageRoot = Join-Path $outputRoot ("DMC5DualSense-Native-" + $Version)
 New-Item -ItemType Directory -Path $stageRoot | Out-Null
 
 foreach ($name in @(
-    'Install.ps1', 'Uninstall.ps1', 'INSTALL-DMC5-DualSense.cmd',
+    'Install.ps1', 'Install-Core.ps1', 'Install-Transactional.ps1', 'Uninstall.ps1', 'INSTALL-DMC5-DualSense.cmd',
     'UNINSTALL-DMC5-DualSense.cmd', 'Test-DualSense.ps1', 'TEST-DualSense.cmd',
     'README_RU.md', 'README_EN.md'
 )) {

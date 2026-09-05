@@ -1,4 +1,4 @@
-﻿param([string]$GameDir)
+param([string]$GameDir)
 
 $ErrorActionPreference = 'Stop'
 
@@ -143,6 +143,21 @@ for ($recordIndex = $manifestFiles.Count - 1; $recordIndex -ge 0; $recordIndex--
             Remove-Item -LiteralPath $target -Force
         } else {
             Write-Warning "A file was changed after installation and was left in place: $target"
+        }
+    }
+}
+
+if ($manifest.PSObject.Properties['RemovedFiles']) {
+    foreach ($record in @($manifest.RemovedFiles)) {
+        $target = Join-Path $resolvedGameDir $record.RelativePath
+        $backup = Join-Path $modDir $record.BackupRelativePath
+        if (Test-Path -LiteralPath $target -PathType Leaf) {
+            Write-Warning "A previously removed file was recreated after installation and was left unchanged: $target"
+            continue
+        }
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
+            Copy-Item -LiteralPath $backup -Destination $target -Force
         }
     }
 }

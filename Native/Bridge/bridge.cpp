@@ -99,7 +99,7 @@ T config_value(const json& object, const char* name, T fallback) {
     const auto wanted = lower_ascii(name);
     for (auto item = object.begin(); item != object.end(); ++item) {
         if (lower_ascii(item.key()) != wanted) continue;
-        try { return item.value().get<T>(); } catch (...) { return fallback; }
+        return item.value().get<T>();
     }
     return fallback;
 }
@@ -111,6 +111,7 @@ BridgeConfig load_config(const std::filesystem::path& path) {
     try {
         json source;
         stream >> source;
+        if (!source.is_object()) throw std::runtime_error("Configuration must be an object.");
         config.port = config_value(source, "Port", config.port);
         config.adaptive_profile = config_value(source, "AdaptiveProfile", config.adaptive_profile);
         config.trigger_strength = config_value(source, "TriggerStrength", config.trigger_strength);
@@ -130,9 +131,13 @@ BridgeConfig load_config(const std::filesystem::path& path) {
         config.haptics_endpoint_volume = config_value(source, "HapticsEndpointVolume",
                                                        config.haptics_endpoint_volume);
     } catch (...) {
-        // Keep defaults if an edited configuration is temporarily malformed.
+        throw std::runtime_error("Invalid config.json: restore a valid configuration before starting feedback.");
     }
-    config.port = std::clamp(config.port, 1, 65535);
+    const auto strength_ok = [](float value) { return std::isfinite(value) && value >= 0 && value <= 1; };
+    if (config.port < 1 || config.port > 65535 || !strength_ok(config.trigger_strength) ||
+        !strength_ok(config.haptics_strength) || !strength_ok(config.lightbar_strength) ||
+        !strength_ok(config.haptics_endpoint_volume))
+        throw std::runtime_error("Invalid config.json: Port must be 1..65535 and strengths must be 0..1.");
     return config;
 }
 
@@ -340,18 +345,20 @@ void parent_monitor(DWORD parent, SharedState& shared, Logger& log) {
 }
 
 int run() {
+    const auto arguments = parse_arguments();
     HANDLE instance = CreateMutexW(nullptr, TRUE, L"Local\\DMC5DualSense.Bridge");
     if (instance == nullptr) return 3;
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         CloseHandle(instance);
-        return 0;
+        return (arguments.probe || arguments.self_test || arguments.full_self_test) ? 5 : 0;
     }
     ComApartment com;
 
     const auto directory = module_directory();
     Logger log(directory / L"bridge.log");
-    const auto config = load_config(directory / L"config.json");
-    const auto arguments = parse_arguments();
+    BridgeConfig config;
+    try { config = load_config(directory / L"config.json"); }
+    catch (const std::exception& error) { log(error.what()); ReleaseMutex(instance); CloseHandle(instance); return 4; }
     const auto ready_path = directory / L"bridge.ready.json";
     std::error_code ignored;
     std::filesystem::remove(ready_path, ignored);
@@ -360,7 +367,14 @@ int run() {
     log("Native session bridge started for the current DMC5 process.");
     SharedState shared;
     SteamInputOutputDevice controller(directory);
-    const bool controller_ready = controller.ensure_connected();
+    bool controller_ready = controller.ensure_connected();
+    if (arguments.probe || arguments.self_test || arguments.full_self_test) {
+        const auto deadline = Clock::now() + std::chrono::seconds(6);
+        while (!controller_ready && Clock::now() < deadline) {
+            Sleep(200);
+            controller_ready = controller.ensure_connected();
+        }
+    }
     log(controller_ready
         ? "DualSense output connected through Steam Input: " + controller.description()
         : "DualSense Steam Input output is waiting: " + controller.description());

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.4-rc1 — Portability and recovery candidate
+
+- Validate the complete payload before removing an existing installation.
+  Keep a transaction snapshot and restore previous files after handled failures.
+- Use the same native telemetry plugin in both packages. The compatibility
+  Bridge remains self-contained C#, but no longer needs REFramework.NET,
+  C++/CLI, or a separately installed .NET runtime inside the game.
+- Re-enumerate Steam output handles instead of treating a cached handle as a
+  permanent connection. Real gameplay-input hotplug acceptance remains pending.
+- Reopen failed audio streams, discard stale sample queues, and require four
+  audio channels rather than silently accepting stereo downmixing.
+- Return explicit errors for invalid configuration and self-tests blocked by
+  an existing Bridge. Standalone diagnostics allow a bounded enumeration wait.
+- Add native builds and packaged installer/runtime failure tests to Windows CI.
+- Preserve the accepted game input/touchpad path, UI assets, event mapping and
+  trigger profiles. No virtual controller or resident service was added.
+
+
 Only public version milestones are listed here. Internal calibration builds,
 discarded test packages, and one-off diagnostics are intentionally omitted.
 

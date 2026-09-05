@@ -17,13 +17,12 @@ internal static class Program
             initiallyOwned: true,
             name: "Local\\DMC5DualSense.Bridge",
             createdNew: out var isFirstInstance);
-        if (!isFirstInstance) return 0;
+        if (!isFirstInstance) return args.Any(arg => arg.StartsWith("--self-test") || arg == "--probe") ? 5 : 0;
 
         var baseDirectory = AppContext.BaseDirectory;
         var configPath = Path.Combine(baseDirectory, "config.json");
         var logPath = Path.Combine(baseDirectory, "bridge.log");
         var readyPath = Path.Combine(baseDirectory, "bridge.ready.json");
-        var config = BridgeConfig.Load(configPath);
 
         void Log(string message)
         {
@@ -31,6 +30,10 @@ internal static class Program
             Console.WriteLine(line);
             try { File.AppendAllText(logPath, line + Environment.NewLine); } catch { }
         }
+
+        BridgeConfig config;
+        try { config = BridgeConfig.Load(configPath); }
+        catch (Exception ex) { Log("Invalid config.json; feedback was not started: " + ex.Message); return 4; }
 
         Console.CancelKeyPress += (_, eventArgs) =>
         {
@@ -45,6 +48,15 @@ internal static class Program
         using var haptics = new HapticEngine(config.HapticsStrength);
 
         var foundController = controller.EnsureConnected();
+        if (args.Any(arg => arg.StartsWith("--self-test") || arg == "--probe"))
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(6);
+            while (!foundController && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(200);
+                foundController = controller.EnsureConnected();
+            }
+        }
         Log(foundController
             ? $"DualSense output connected through Steam Input: {controller.Description}"
             : $"DualSense Steam Input output is waiting: {controller.Description}");
@@ -99,7 +111,10 @@ internal static class Program
             return 0;
         }
 
-        using var udp = new UdpClient(new IPEndPoint(IPAddress.Loopback, config.Port));
+        UdpClient client;
+        try { client = new UdpClient(new IPEndPoint(IPAddress.Loopback, config.Port)); }
+        catch (SocketException ex) { Log("Telemetry port unavailable: " + ex.Message); return 3; }
+        using var udp = client;
         Log($"Listening for DMC5 telemetry on 127.0.0.1:{config.Port}.");
         WriteReadyStatus(readyPath, foundController, audioStarted, controller.Description);
 

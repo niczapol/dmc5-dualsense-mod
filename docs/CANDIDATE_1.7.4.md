@@ -56,6 +56,46 @@ both full packages, runs the Windows tests and retains candidate ZIP artifacts.
 These Windows runner checks can be repeated while working on a MacBook.
 They do not simulate physical adaptive-trigger force or actual Steam gameplay.
 
+### Recorded results (2026-09-05)
+
+- Code and build-input verification commit: `753120d8fa0c324563251643c51506e91f31b1a5`.
+- [Windows CI run 33943760124](https://github.com/niczapol/dmc5-dualsense-mod/actions/runs/33943760124):
+  both jobs passed, including fresh native/fallback package builds and all
+  installer, controller-handle and runtime-isolation regression tests.
+- Both final local packages passed clean installation/uninstallation and eight
+  adversarial installer cases each. Eight combined runtime-isolation checks
+  passed. Local migration fixtures also passed upgrades from each 1.7.3
+  variant and switching native/fallback in both directions.
+- Installed the native candidate over the developer PC's stable installation:
+  all 33 installed manifest files matched; user configuration was preserved
+  byte-for-byte. No game launch or tactile test was performed in this pass.
+- Local source build was `24e00b8`; the subsequent `753120d` change only fixes
+  pinned upstream header verification for LF/CRLF downloads. CI caught this
+  fresh-download failure that the existing local compiler/header cache hid.
+- Native local ZIP: 16,204,974 bytes; SHA-256
+  `B899EE3FBCB9827D3386C88441B7600BEA5903A6303352EE8CBCA3F519B057B7`.
+  Fallback local ZIP: 97,984,513 bytes; SHA-256
+  `60C318037AAF7ED432BB6EAA528B608795669D185C10A2C47138E0A97345CDA4`.
+  These identify local packages, not a claim of byte-identical CI archives.
+
+### Continuing from a laptop
+
+Clone this repository and check out `fix/1.7.4-portability`; read this file and
+the audit before changing input/output architecture. The successful run above
+has a `windows-tested-candidates` artifact containing both ZIPs and their
+checksums (90-day retention, GitHub sign-in required). This is not a Release.
+After artifact expiration, rerun CI on this branch: its pinned media and
+compiler download do not need the developer PC. Windows jobs run remotely;
+macOS alone cannot run the game or validate hardware effects.
+
+The public stable release and Nexus files remain 1.7.3. Do not merge/publish
+this candidate as accepted until the hardware checklist below is confirmed.
+For local rollback, a pre-update backup is stored on the Windows development
+PC under `C:/ds/.work/backup-before-1.7.4-rc1-20260905`. It contains mod state,
+logs/configuration and owned loose files, not the multi-gigabyte game PAK.
+Use the candidate's uninstaller followed by the stable 1.7.3 installer for
+normal rollback; do not blindly overlay old manifests or PAK hash records.
+
 ## Human checks before stable publication
 
 1. Cold launch through Steam with one USB DualSense already connected.

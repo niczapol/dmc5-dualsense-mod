@@ -4,6 +4,9 @@ These are diagnostic regression tests added during the 2026-09-05 audit of
 release 1.7.3. Some assertions intentionally FAIL on that release. A passing
 normal-build test suite does not supersede these findings.
 
+The 1.7.4-rc1 candidate passes these regressions for both packages. See
+`docs/CANDIDATE_1.7.4.md` for the tested commit, CI run and hardware limits.
+
 Run on Windows x64 with PowerShell 7. No game or real controller is required.
 The installer test also invokes the OS-bundled Windows PowerShell 5.1, which is
 what the distributed CMD entrypoint actually uses. Close DMC5 and its Bridge
@@ -34,10 +37,11 @@ the same LLVM-MinGW toolchain as `Native/build-native.ps1`.
   retry after removing that conflict, edited configuration preservation,
   repair after Steam verification, and a spaces/brackets/Unicode game path.
 - Released Bridge executables: absent Steam API, singleton false-success,
-  termination with the parent process, ready-file cleanup, and malformed C#
+  termination with the parent process, ready-file cleanup, and malformed
   configuration. Audio is disabled and there is no real Steam API DLL in the
-  fixtures. Native malformed-config execution is deliberately skipped because
-  its fallback defaults would enable audio.
+  fixtures. Native malformed-config execution is skipped only for historical
+  1.7.3 packages, whose fallback defaults would enable audio; the candidate
+  rejects invalid configuration and is tested on this path too.
 - Native platform code: a fake Steam API presents handle 101, disconnects it,
   then presents handle 202. The test observes the actual destination of output
   calls and counts controller enumerations.
@@ -45,7 +49,8 @@ the same LLVM-MinGW toolchain as `Native/build-native.ps1`.
 The fake `steam_api64.dll` is ONLY a test double. Never copy it into the game,
 installer payload, release assets, or any real Steam library.
 
-`test_framework_dependency.cpp` is a separate optional hostfxr probe. Compile
+`test_framework_dependency.cpp` is a separate optional, historical 1.7.3
+hostfxr probe. The 1.7.4 candidate no longer ships this C++/CLI plugin. Compile
 with the SDK's `hostfxr.h` include directory and `-municode`; pass three args:
 the real hostfxr DLL path, the packaged `REFramework.NET.runtimeconfig.json`,
 and the .NET root to resolve frameworks from. Comparing an installed .NET 10

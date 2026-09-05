@@ -4,6 +4,9 @@ GitHub build: **1.7.4-rc2** — installation and portability improvements.
 Normal USB gameplay was user-confirmed on the preceding candidate; this revision
 retains those fixes. See the [changelog](CHANGELOG.md) for details. Public stable
 downloads below and Nexus remain on 1.7.3 until distribution is updated.
+Both 1.7.4-rc2 ZIPs are available in the `windows-tested-candidates` artifact
+on the [GitHub build page](https://github.com/niczapol/dmc5-dualsense-mod/actions/runs/33945148439)
+(GitHub sign-in required; artifacts retained for 90 days).
 
 [English](README.md) | [Русский](README_RU.md)
 

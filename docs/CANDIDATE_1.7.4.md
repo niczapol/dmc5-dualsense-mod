@@ -82,8 +82,9 @@ They do not simulate physical adaptive-trigger force or actual Steam gameplay.
 ### Continuing from a laptop
 
 Clone this repository and check out `fix/1.7.4-portability`; read this file and
-the audit before changing input/output architecture. The successful run above
-has a `windows-tested-candidates` artifact containing both ZIPs and their
+the audit before changing input/output architecture. Use
+[the rc2 build](https://github.com/niczapol/dmc5-dualsense-mod/actions/runs/33945148439),
+not the historical rc1 run above. Its `windows-tested-candidates` artifact contains both ZIPs and their
 checksums (90-day retention, GitHub sign-in required). This is not a Release.
 After artifact expiration, rerun CI on this branch: its pinned media and
 compiler download do not need the developer PC. Windows jobs run remotely;
@@ -118,11 +119,12 @@ Try the fallback separately if time permits. A no-developer-tools Windows PC
 or VM remains useful for a final independent prerequisite check. Do not
 publish the candidate as hardware-verified until the user confirms these tests.
 
-## Rejected reconnect experiment — internal history only
-
-### rc2 verification
+## rc2 verification
 
 Runtime/package source commit: `962693bf2d8db6f90fe94a2a74dfc6bd0376d47f`.
+Final CI at `775a535ff93f2d588b077099662c628ccefd0506` passed both Windows
+jobs in run 33945148439, including both complete ZIP builds, installer tests
+and runtime isolation. Both downloadable archives were uploaded successfully.
 Both local ZIPs passed clean installation/uninstallation, eight adversarial
 installer cases each and all eight combined runtime checks. Existing logic
 tests passed. The first rc2 CI run (33944937635) also reported every runtime
@@ -138,7 +140,7 @@ Local fallback ZIP: 97,984,089 bytes, SHA-256
 The user's real installation is still the tested rc1; rc2 was built/tested in
 isolated folders, not installed over their working game during this cleanup.
 
-### Experiment outcome
+## Rejected reconnect experiment — internal history only
 
 Implementation at `24e00b8` / `753120d`: enumerate Steam OUTPUT handles on each
 write, retain a still-present handle or select a replacement, reopen a failed
